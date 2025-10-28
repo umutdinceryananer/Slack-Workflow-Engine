@@ -1,0 +1,14 @@
+# Local development artifacts
+.venv/
+__pycache__/
+*.pyc
+.env
+local.db
+
+# Planning documents (not shipped)
+Development_Documents/
+
+# Test artifacts
+.pytest_cache/
+.coverage
+coverage.xml
