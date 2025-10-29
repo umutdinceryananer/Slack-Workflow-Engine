@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 from flask import Flask, jsonify, request
 from slack_bolt import App as SlackApp
 from slack_bolt.adapter.flask import SlackRequestHandler
@@ -19,6 +21,20 @@ def _create_bolt_app(settings: AppSettings) -> SlackApp:
     )
 
 
+def _register_error_handlers(flask_app: Flask) -> None:
+    """Register a JSON error handler that attaches a trace identifier."""
+
+    @flask_app.errorhandler(Exception)
+    def handle_unexpected_error(error: Exception):  # type: ignore[override]
+        trace_id = str(uuid4())
+        flask_app.logger.exception(
+            "Unhandled application error", extra={"trace_id": trace_id}, exc_info=error
+        )
+        response = jsonify({"error": "internal_server_error", "trace_id": trace_id})
+        response.status_code = 500
+        return response
+
+
 def create_app() -> Flask:
     """Create and configure the Flask application."""
 
@@ -26,6 +42,8 @@ def create_app() -> Flask:
     bolt_app = _create_bolt_app(settings)
     handler = SlackRequestHandler(bolt_app)
     flask_app = Flask(__name__)
+
+    _register_error_handlers(flask_app)
 
     @flask_app.route("/slack/events", methods=["POST"])
     def slack_events():
