@@ -15,6 +15,8 @@ from slack_workflow_engine import config  # noqa: E402
 def test_health_endpoint_returns_ok(monkeypatch):
     monkeypatch.setenv("SLACK_BOT_TOKEN", "test-token")
     monkeypatch.setenv("SLACK_SIGNING_SECRET", "test-secret")
+    monkeypatch.setenv("APPROVER_USER_IDS", "U111,U222")
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///test.db")
     config.get_settings.cache_clear()
 
     reload(app_module)

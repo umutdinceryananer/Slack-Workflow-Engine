@@ -6,10 +6,10 @@ from flask import Flask, jsonify, request
 from slack_bolt import App as SlackApp
 from slack_bolt.adapter.flask import SlackRequestHandler
 
-from slack_workflow_engine.config import SlackSettings, get_settings
+from slack_workflow_engine.config import AppSettings, get_settings
 
 
-def _create_bolt_app(settings: SlackSettings) -> SlackApp:
+def _create_bolt_app(settings: AppSettings) -> SlackApp:
     """Initialise the Slack Bolt application using validated settings."""
 
     return SlackApp(

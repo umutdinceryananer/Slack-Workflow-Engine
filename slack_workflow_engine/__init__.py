@@ -1,8 +1,5 @@
-"""Slack Workflow Engine package initialisation."""
+"\"\"\"Slack Workflow Engine package initialisation.\"\"\""
 
-from .config import SlackSettings, get_settings  # noqa: F401
+from .config import AppSettings, get_settings  # noqa: F401
 
-__all__ = [
-    "SlackSettings",
-    "get_settings",
-]
+__all__ = ["AppSettings", "get_settings"]

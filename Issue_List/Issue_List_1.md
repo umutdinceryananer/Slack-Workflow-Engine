@@ -8,7 +8,7 @@ This list translates the Part-1 scope and lock decisions into actionable issues.
 - Logs are JSON via structlog; no secrets/PII are logged.
 - Errors return JSON with a correlation `trace_id` when applicable.
 
-## 1) Project Scaffolding and Dependencies
+## 1) Project Scaffolding and Dependencies ✅
 - Description: Set up a minimal Python project structure and dependencies required for MVP.
 - Acceptance Criteria:
   - `app.py` (entry) and a minimal package/module layout exist.
@@ -18,7 +18,7 @@ This list translates the Part-1 scope and lock decisions into actionable issues.
 - Tests:
   - `pytest -q` discovers and runs a trivial smoke test.
 
-## 2) Environment Configuration and .env.example
+## 2) Environment Configuration and .env.example ✅
 - Description: Centralize configuration via environment variables and provide examples.
 - Acceptance Criteria:
   - `.env.example` includes: `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, `APPROVER_USER_IDS`, `DATABASE_URL`.
