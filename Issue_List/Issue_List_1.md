@@ -40,7 +40,7 @@ This list translates the Part-1 scope and lock decisions into actionable issues.
 - Tests:
   - App factory test: `/slack/events` exists; error handler produces JSON for an injected error.
 
-## 4) Slack Signature Verification and Replay Protection
+## 4) Slack Signature Verification and Replay Protection ✅
 - Description: Verify `X-Slack-Signature` and `X-Slack-Request-Timestamp` with a sliding time window.
 - Acceptance Criteria:
   - Default time window 5 minutes; stale timestamp or invalid signature returns `401`.
