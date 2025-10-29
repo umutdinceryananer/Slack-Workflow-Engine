@@ -9,6 +9,11 @@ from slack_bolt import App as SlackApp
 from slack_bolt.adapter.flask import SlackRequestHandler
 
 from slack_workflow_engine.config import AppSettings, get_settings
+from slack_workflow_engine.security import (
+    SLACK_SIGNATURE_HEADER,
+    SLACK_TIMESTAMP_HEADER,
+    is_valid_slack_request,
+)
 
 
 def _create_bolt_app(settings: AppSettings) -> SlackApp:
@@ -47,6 +52,18 @@ def create_app() -> Flask:
 
     @flask_app.route("/slack/events", methods=["POST"])
     def slack_events():
+        raw_body = request.get_data(as_text=True)
+        timestamp = request.headers.get(SLACK_TIMESTAMP_HEADER, "")
+        signature = request.headers.get(SLACK_SIGNATURE_HEADER, "")
+        if not is_valid_slack_request(
+            signing_secret=settings.signing_secret,
+            timestamp=timestamp,
+            body=raw_body,
+            signature=signature,
+        ):
+            response = jsonify({"error": "invalid_signature"})
+            response.status_code = 401
+            return response
         return handler.handle(request)
 
     @flask_app.route("/healthz", methods=["GET"])

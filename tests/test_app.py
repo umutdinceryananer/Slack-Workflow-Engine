@@ -12,7 +12,7 @@ if str(ROOT) not in sys.path:  # pragma: no cover
     sys.path.insert(0, str(ROOT))
 
 import app as app_module  # noqa: E402
-from slack_workflow_engine import config  # noqa: E402
+from slack_workflow_engine import config, security  # noqa: E402
 
 
 class DummyHandler:
@@ -34,6 +34,14 @@ def _seed_env(monkeypatch):
     config.get_settings.cache_clear()
 
 
+def _signed_headers(secret: str, body: str, timestamp: str) -> dict[str, str]:
+    signature = security.compute_signature(secret, timestamp, body)  # type: ignore[attr-defined]
+    return {
+        security.SLACK_SIGNATURE_HEADER: signature,
+        security.SLACK_TIMESTAMP_HEADER: timestamp,
+    }
+
+
 def test_slack_events_route_uses_handler(monkeypatch):
     _seed_env(monkeypatch)
 
@@ -42,11 +50,73 @@ def test_slack_events_route_uses_handler(monkeypatch):
 
     flask_app = app_module.create_app()
 
+    body = "{}"
+    timestamp = "1700000000"
+    monkeypatch.setattr(security, "time", SimpleNamespace(time=lambda: int(timestamp)))
+    headers = _signed_headers("secret", body, timestamp)
+
     client = flask_app.test_client()
-    response = client.post("/slack/events", data="{}", content_type="application/json")
+    response = client.post(
+        "/slack/events",
+        data=body,
+        content_type="application/json",
+        headers=headers,
+    )
 
     assert response.status_code == 200
     assert DummyHandler.called is True
+
+
+def test_invalid_signature_returns_unauthorised(monkeypatch):
+    _seed_env(monkeypatch)
+
+    DummyHandler.called = False
+    monkeypatch.setattr(app_module, "SlackRequestHandler", DummyHandler)
+    flask_app = app_module.create_app()
+
+    body = "{}"
+    timestamp = "1700000000"
+    monkeypatch.setattr(security, "time", SimpleNamespace(time=lambda: int(timestamp)))
+
+    client = flask_app.test_client()
+    response = client.post(
+        "/slack/events",
+        data=body,
+        content_type="application/json",
+        headers={
+            security.SLACK_SIGNATURE_HEADER: "v0=invalid",
+            security.SLACK_TIMESTAMP_HEADER: timestamp,
+        },
+    )
+
+    assert response.status_code == 401
+    assert response.get_json()["error"] == "invalid_signature"
+    assert DummyHandler.called is False
+
+
+def test_stale_timestamp_rejected(monkeypatch):
+    _seed_env(monkeypatch)
+
+    DummyHandler.called = False
+    monkeypatch.setattr(app_module, "SlackRequestHandler", DummyHandler)
+    flask_app = app_module.create_app()
+
+    body = "{}"
+    request_timestamp = "100"
+    monkeypatch.setattr(security, "time", SimpleNamespace(time=lambda: 2000))
+    headers = _signed_headers("secret", body, request_timestamp)
+
+    client = flask_app.test_client()
+    response = client.post(
+        "/slack/events",
+        data=body,
+        content_type="application/json",
+        headers=headers,
+    )
+
+    assert response.status_code == 401
+    assert response.get_json()["error"] == "invalid_signature"
+    assert DummyHandler.called is False
 
 
 def test_error_handler_returns_trace_id(monkeypatch):

@@ -31,7 +31,7 @@ This list translates the Part-1 scope and lock decisions into actionable issues.
   - Extended by Part-2 #17 "RBAC: Roles, Role Members, and Config References" (role-based approvers and group sync env/config).
   - Extended by Part-2 #20 "Config Live Reload + Validation + Four-eyes Apply" (dynamic config governance).
 
-## 3) Flask + Slack Bolt Integration
+## 3) Flask + Slack Bolt Integration ✅
 - Description: Integrate Slack Bolt with Flask using `SlackRequestHandler` and expose routes.
 - Acceptance Criteria:
   - Route `POST /slack/events` wired through Bolt handler.
