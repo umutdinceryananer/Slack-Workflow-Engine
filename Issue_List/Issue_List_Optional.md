@@ -36,4 +36,3 @@ This document collects items deferred from Part-1 and Part-2 to keep the core sc
 - From: Issue_List_2.md #20
 - Scope: File watcher that detects config changes and enforces two-person approval before applying.
 - Tests: File-change trigger, preview diff generation, double-confirm success, single-confirm failure.
-

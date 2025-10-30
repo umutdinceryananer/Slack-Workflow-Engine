@@ -57,7 +57,7 @@ This list translates the Part-1 scope and lock decisions into actionable issues.
 - Tests:
   - Handler under artificial delay still calls `ack()` within 3 seconds; `trace_id` propagation verified.
 
-## 6) Workflow Config Schema (Pydantic) and Loader
+## 6) Workflow Config Schema (Pydantic) and Loader ?
 - Description: Define the schema for a workflow (refund) and load `workflows/refund.json` at startup.
 - Acceptance Criteria:
   - Validation errors are logged and the app fails fast on invalid config.
