@@ -8,6 +8,7 @@ from flask import Flask, jsonify, request
 from slack_bolt import App as SlackApp
 from slack_bolt.adapter.flask import SlackRequestHandler
 
+from slack_workflow_engine.background import run_async
 from slack_workflow_engine.config import AppSettings, get_settings
 from slack_workflow_engine.security import (
     SLACK_SIGNATURE_HEADER,
@@ -64,7 +65,12 @@ def create_app() -> Flask:
             response = jsonify({"error": "invalid_signature"})
             response.status_code = 401
             return response
-        return handler.handle(request)
+
+        def process_request():
+            handler.handle(request)
+
+        run_async(process_request)
+        return "", 200
 
     @flask_app.route("/healthz", methods=["GET"])
     def healthz():
@@ -76,3 +82,4 @@ def create_app() -> Flask:
 if __name__ == "__main__":  # pragma: no cover - manual execution helper
     application = create_app()
     application.run(host="0.0.0.0", port=3000, debug=True)
+

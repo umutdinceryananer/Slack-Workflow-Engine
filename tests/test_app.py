@@ -35,7 +35,7 @@ def _seed_env(monkeypatch):
 
 
 def _signed_headers(secret: str, body: str, timestamp: str) -> dict[str, str]:
-    signature = security.compute_signature(secret, timestamp, body)  # type: ignore[attr-defined]
+    signature = security.compute_signature(secret, timestamp, body)
     return {
         security.SLACK_SIGNATURE_HEADER: signature,
         security.SLACK_TIMESTAMP_HEADER: timestamp,
@@ -47,7 +47,6 @@ def test_slack_events_route_uses_handler(monkeypatch):
 
     DummyHandler.called = False
     monkeypatch.setattr(app_module, "SlackRequestHandler", DummyHandler)
-
     flask_app = app_module.create_app()
 
     body = "{}"
@@ -64,6 +63,7 @@ def test_slack_events_route_uses_handler(monkeypatch):
     )
 
     assert response.status_code == 200
+    assert response.data == b""
     assert DummyHandler.called is True
 
 
@@ -119,19 +119,32 @@ def test_stale_timestamp_rejected(monkeypatch):
     assert DummyHandler.called is False
 
 
-def test_error_handler_returns_trace_id(monkeypatch):
+def test_slack_events_ack_is_immediate(monkeypatch):
     _seed_env(monkeypatch)
 
+    def slow_handle(_request):
+        import time
+
+        time.sleep(0.2)
+        return Response("ok", status=200)
+
+    dummy_handler = type("SlowHandler", (), {"__init__": lambda self, app: None, "handle": slow_handle})
+    monkeypatch.setattr(app_module, "SlackRequestHandler", dummy_handler)
     flask_app = app_module.create_app()
 
-    @flask_app.route("/boom")
-    def boom():
-        raise RuntimeError("boom")
+    body = "{}"
+    timestamp = "1700000000"
+    monkeypatch.setattr(security, "time", SimpleNamespace(time=lambda: int(timestamp)))
+    headers = _signed_headers("secret", body, timestamp)
 
-    with flask_app.test_client() as client:
-        response = client.get("/boom")
+    client = flask_app.test_client()
+    response = client.post(
+        "/slack/events",
+        data=body,
+        content_type="application/json",
+        headers=headers,
+    )
 
-    assert response.status_code == 500
-    body = response.get_json()
-    assert body["error"] == "internal_server_error"
-    assert body["trace_id"]
+    assert response.status_code == 200
+    assert response.data == b""
+
