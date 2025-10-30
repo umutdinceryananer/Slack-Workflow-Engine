@@ -48,7 +48,7 @@ This list translates the Part-1 scope and lock decisions into actionable issues.
 - Tests:
   - Valid/invalid signature and replay (same signature twice) cases.
 
-## 5) 3-Second Ack and Async Processing
+## 5) 3-Second Ack and Async Processing ✅
 - Description: Enforce Slack’s 3-second rule using immediate `ack()` and offload long work.
 - Acceptance Criteria:
   - Shared utility for async execution (e.g., a small thread pool) used by slash/actions.
