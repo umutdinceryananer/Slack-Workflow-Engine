@@ -143,7 +143,26 @@ This list translates the Part-1 scope and lock decisions into actionable issues.
   - Extended by Part-2 #4 "Home Quick Actions (Approve/Reject)" (actions from Home view).
   - Extended by Part-2 #7/#9 "Levels & Message Updates" (multi-level approvals and richer updates).
   - Related to Part-2 #15 "Revise/Resubmit Cycle and Cancel/Rollback" (post-reject flows).
-
+ 
+## E2E Manual Test (after Issue 13)
+- When to run: after Issue 10–13 are complete (slash → modal → persist → channel message → approve/reject).
+- Slack App setup:
+  - Create an app in your workspace; obtain Bot Token and Signing Secret.
+  - Scopes: `commands`, `chat:write`, `views:open`, `views:write` (optionally `chat:write.public`).
+  - Slash Command: `/request` → Request URL: `https://<ngrok>/slack/events`.
+  - Interactivity URL: `https://<ngrok>/slack/events`.
+  - Add the app to the target channel.
+- Environment: set `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, `APPROVER_USER_IDS`, `DATABASE_URL`.
+- Run locally: `python app.py` and `ngrok http 3000`.
+- Steps:
+  - In Slack: `/request refund` → confirm the modal opens with configured fields.
+  - Submit → verify DB insert and channel message posted (with Approve/Reject).
+  - Click Approve/Reject → status and message are updated accordingly; buttons disabled.
+- Troubleshooting:
+  - `invalid_auth`: verify tokens and app installed to channel.
+  - Signature mismatch: ensure ngrok URL matches Slack settings.
+  - 3s ack warnings: app running; route reachable; ack occurs instantly.
+ 
 ## 14) Self-Approval Guard
 - Description: Prevent the request creator from approving their own request.
 - Acceptance Criteria:
