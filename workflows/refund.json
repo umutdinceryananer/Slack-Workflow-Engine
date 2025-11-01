@@ -1,0 +1,14 @@
+{
+  "type": "refund",
+  "title": "Refund Request",
+  "fields": [
+    {"name": "order_id", "label": "Order ID", "type": "text", "required": true},
+    {"name": "amount", "label": "Amount", "type": "number", "required": true},
+    {"name": "reason", "label": "Reason", "type": "textarea"}
+  ],
+  "approvers": {
+    "strategy": "sequential",
+    "levels": [["U123"], ["U456"]]
+  },
+  "notify_channel": "CREFUND"
+}

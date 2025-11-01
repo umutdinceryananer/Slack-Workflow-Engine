@@ -37,8 +37,7 @@ def _field_to_block(field: FieldDefinition) -> Dict:
         },
         "element": element,
     }
-    if not field.required:
-        block["optional"] = True
+    block["optional"] = not field.required
     return block
 
 

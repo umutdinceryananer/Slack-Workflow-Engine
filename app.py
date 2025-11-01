@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from uuid import uuid4
 
 from flask import Flask, jsonify, request
@@ -54,55 +53,59 @@ def _load_workflow_definition_by_type(workflow_type: str):
     return load_workflow_definition(file_path)
 
 
+def _open_modal(client, trigger_id: str, view: dict, workflow_type: str, logger) -> None:
+    try:
+        client.views_open(trigger_id=trigger_id, view=view)
+    except SlackApiError as exc:  # pragma: no cover - network dependent
+        logger.error(
+            "Failed to open workflow modal",
+            extra={"workflow_type": workflow_type, "error": exc.response.get("error")},
+        )
+
+
+def _handle_request_command(ack, command, client, logger):
+    workflow_type = (command.get("text") or "").strip().lower()
+    if not workflow_type:
+        ack(
+            {
+                "response_type": "ephemeral",
+                "text": "Please specify a workflow type, e.g. `/request refund`.",
+            }
+        )
+        return
+
+    try:
+        definition = _load_workflow_definition_by_type(workflow_type)
+    except FileNotFoundError:
+        ack(
+            {
+                "response_type": "ephemeral",
+                "text": f"Workflow `{workflow_type}` is not configured.",
+            }
+        )
+        return
+    except ValidationError:
+        logger.exception("Invalid workflow definition", extra={"workflow_type": workflow_type})
+        ack(
+            {
+                "response_type": "ephemeral",
+                "text": "This workflow definition is invalid. Please contact an administrator.",
+            }
+        )
+        return
+
+    view = build_modal_view(definition)
+    trigger_id = command.get("trigger_id")
+    ack()
+    run_async(_open_modal, client, trigger_id, view, workflow_type, logger)
+
+
 def _register_slash_handlers(bolt_app: SlackApp) -> None:
     WORKFLOW_DEFINITION_DIR.mkdir(parents=True, exist_ok=True)
 
     @bolt_app.command("/request")
-    def handle_request(ack, respond, command, client, logger):
-        workflow_type = (command.get("text") or "").strip().lower()
-        if not workflow_type:
-            ack(
-                {
-                    "response_type": "ephemeral",
-                    "text": "Please specify a workflow type, e.g. `/request refund`.",
-                }
-            )
-            return
-
-        try:
-            definition = _load_workflow_definition_by_type(workflow_type)
-        except FileNotFoundError:
-            ack(
-                {
-                    "response_type": "ephemeral",
-                    "text": f"Workflow `{workflow_type}` is not configured.",
-                }
-            )
-            return
-        except ValidationError:
-            logger.exception("Invalid workflow definition", extra={"workflow_type": workflow_type})
-            ack(
-                {
-                    "response_type": "ephemeral",
-                    "text": "This workflow definition is invalid. Please contact an administrator.",
-                }
-            )
-            return
-
-        view = build_modal_view(definition)
-        trigger_id = command.get("trigger_id")
-        ack()
-
-        def open_modal() -> None:
-            try:
-                client.views_open(trigger_id=trigger_id, view=view)
-            except SlackApiError as exc:  # pragma: no cover - network dependent
-                logger.error(
-                    "Failed to open workflow modal",
-                    extra={"workflow_type": workflow_type, "error": exc.response.get("error")},
-                )
-
-        run_async(open_modal)
+    def handle_request(ack, command, client, logger):
+        _handle_request_command(ack=ack, command=command, client=client, logger=logger)
 
 
 def create_app() -> Flask:
