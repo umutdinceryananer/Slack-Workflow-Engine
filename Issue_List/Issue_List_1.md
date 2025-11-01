@@ -98,7 +98,7 @@ This list translates the Part-1 scope and lock decisions into actionable issues.
 - Tests:
   - Block Kit snapshot for the modal; invalid type returns ephemeral error.
 
-## 10) Modal Submission Validation and Persistence
+## 10) Modal Submission Validation and Persistence ✅
 - Description: Validate submitted values with Pydantic and create a request record.
 - Acceptance Criteria:
   - `payload_json` stored as canonical JSON (stable key order; trimmed values where applicable).
