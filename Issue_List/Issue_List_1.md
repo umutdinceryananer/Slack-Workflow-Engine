@@ -82,7 +82,7 @@ This list translates the Part-1 scope and lock decisions into actionable issues.
   Cross-References:
   - Extended by Part-2 #7 "State Machine: Levels + Quorum (N-of-M) + Tie-breaker" (adds `approvals` and `status_history` tables via Alembic).
 
-## 8) State Machine and Optimistic Locking
+## 8) State Machine and Optimistic Locking ✅
 - Description: Encapsulate status transitions and prevent race/double-click effects.
 - Acceptance Criteria:
   - Allowed transitions: `PENDING` -> `APPROVED|REJECTED`; error on invalid.
