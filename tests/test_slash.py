@@ -12,7 +12,8 @@ if str(ROOT) not in sys.path:
 
 import app as app_module  # noqa: E402
 from slack_workflow_engine import config  # noqa: E402
-from slack_workflow_engine.workflows import build_modal_view, load_workflow_definition  # noqa: E402
+from slack_workflow_engine.workflows import build_modal_view  # noqa: E402
+from slack_workflow_engine.workflows.models import WorkflowDefinition  # noqa: E402
 
 
 @pytest.fixture
@@ -28,7 +29,7 @@ def settings_env(monkeypatch, tmp_path):
 
 
 @pytest.fixture
-def workflow_definition(tmp_path):
+def workflow_definition():
     data = {
         "type": "demo",
         "title": "Demo Workflow",
@@ -39,15 +40,13 @@ def workflow_definition(tmp_path):
         "approvers": {"strategy": "sequential", "levels": [["U1"], ["U2"]]},
         "notify_channel": "C123",
     }
-    file_path = tmp_path / "demo.json"
-    file_path.write_text(json.dumps(data), encoding="utf-8")
-    return load_workflow_definition(file_path)
+    return WorkflowDefinition(**data)
 
 
 def test_build_modal_view_constructs_all_fields(workflow_definition):
     view = build_modal_view(workflow_definition)
 
-    assert view["callback_id"] == "workflow_submit:demo"
+    assert view["callback_id"] == "workflow_submit"
     assert len(view["blocks"]) == 2
     first_block = view["blocks"][0]
     assert first_block["block_id"] == "foo"
@@ -72,7 +71,7 @@ def test_slash_command_opens_modal(monkeypatch, settings_env):
     client_calls = []
 
     class DummyClient:
-        def views_open(self, trigger_id, view):  # pragma: no cover - trivial
+        def views_open(self, trigger_id, view):
             client_calls.append((trigger_id, view))
 
     ack_calls = []

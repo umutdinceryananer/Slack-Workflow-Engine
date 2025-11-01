@@ -11,9 +11,23 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from slack_workflow_engine.workflows import (
+    WorkflowDefinition,
     load_workflow_definition,
     load_workflow_definitions,
+    build_modal_view,
 )
+@pytest.fixture
+def workflow_definition_fixture():
+    return WorkflowDefinition(
+        type="demo",
+        title="Demo Workflow",
+        fields=[
+            {"name": "foo", "label": "Foo", "type": "text", "required": True},
+            {"name": "bar", "label": "Bar", "type": "textarea"},
+        ],
+        approvers={"strategy": "sequential", "levels": [["U1"]]},
+        notify_channel="C123",
+    )
 
 
 def test_load_workflow_definition_parses_valid_json(tmp_path):
@@ -84,3 +98,11 @@ def test_directory_loader_returns_dictionary(tmp_path):
 
     assert "expense" in definitions
     assert definitions["expense"].approvers.strategy == "parallel"
+
+
+def test_build_modal_view_private_metadata(workflow_definition_fixture):
+    view = build_modal_view(workflow_definition_fixture)
+    metadata = json.loads(view["private_metadata"])
+    assert metadata["workflow_type"] == "demo"
+    assert metadata["fields"] == ["foo", "bar"]
+

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from pydantic import BaseModel, Field, ValidationError
 
@@ -54,7 +54,7 @@ def parse_submission(state_payload: Dict[str, Any], definition: WorkflowDefiniti
 
         normalised = _normalise_field_value(submission_value, field)
         if field.required and (normalised is None or (isinstance(normalised, str) and normalised.strip() == "")):
-            raise ValueError(f"Field '{field.label}' is required.")
+            raise ValueError(f"{field.name}: {field.label} is required.")
         submission[field.name] = normalised
 
     return submission
@@ -64,3 +64,12 @@ def canonical_json(data: Dict[str, Any]) -> str:
     """Return a canonical JSON string with stable ordering and whitespace."""
 
     return json.dumps(data, sort_keys=True, separators=(",", ":"))
+
+
+def compute_request_key(workflow_type: str, user_id: str, canonical_payload: str) -> str:
+    """Compute a deterministic request key for idempotency."""
+
+    import hashlib
+
+    base = f"{workflow_type}:{user_id}:{canonical_payload}"
+    return hashlib.sha256(base.encode("utf-8")).hexdigest()

@@ -51,8 +51,10 @@ def test_parse_submission_normalises_values(workflow_definition):
 def test_parse_submission_missing_required_field(workflow_definition):
     state = {"values": {"amount": {"amount": {"value": "100"}}}}
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError) as err:
         parse_submission(state, workflow_definition)
+
+    assert "order_id" in str(err.value)
 
 
 def test_canonical_json_stable_ordering():

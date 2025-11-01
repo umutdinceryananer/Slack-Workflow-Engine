@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Dict, List
+import json
+from typing import Any, Dict, List
 
 from .models import FieldDefinition, WorkflowDefinition
 
@@ -13,7 +14,7 @@ MAX_LABEL_LENGTH = 75
 def _truncate(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
-    return text[: limit - 1] + "…"
+    return text[: limit - 1] + "..."
 
 
 def _field_to_block(field: FieldDefinition) -> Dict:
@@ -46,9 +47,15 @@ def build_modal_view(definition: WorkflowDefinition) -> Dict:
 
     blocks: List[Dict] = [_field_to_block(field) for field in definition.fields]
 
+    state = {
+        "workflow_type": definition.type,
+        "fields": [field.name for field in definition.fields],
+    }
+
     return {
         "type": "modal",
-        "callback_id": f"workflow_submit:{definition.type}",
+        "callback_id": "workflow_submit",
+        "private_metadata": json.dumps(state),
         "title": {"type": "plain_text", "text": _truncate(definition.title, MAX_TITLE_LENGTH), "emoji": True},
         "submit": {"type": "plain_text", "text": "Submit", "emoji": True},
         "close": {"type": "plain_text", "text": "Cancel", "emoji": True},
