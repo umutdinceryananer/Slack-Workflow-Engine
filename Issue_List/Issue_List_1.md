@@ -69,7 +69,7 @@ This list translates the Part-1 scope and lock decisions into actionable issues.
   Cross-References:
   - Extended by Part-2 #6 "Config Schema Extension for Multi-level Approvals" (sequential/parallel levels).
 
-## 7) SQLAlchemy Models: requests and messages
+## 7) SQLAlchemy Models: requests and messages ✅
 - Description: Implement minimal persistence for requests and message references.
 - Acceptance Criteria:
   - `requests(id, type, created_by, payload_json, status, created_at, updated_at, decided_by, decided_at, request_key, version)`.
