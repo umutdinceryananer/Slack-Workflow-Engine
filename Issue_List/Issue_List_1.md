@@ -106,7 +106,7 @@ This list translates the Part-1 scope and lock decisions into actionable issues.
 - Tests:
   - Canonicalization test for the generated `payload_json` and link presence in the ephemeral response.
 
-## 11) Channel Message with Approve/Reject and Message Reference
+## 11) Channel Message with Approve/Reject and Message Reference ✅
 - Description: Post a Block Kit message to `notify_channel` with decision buttons; persist reference.
 - Acceptance Criteria:
   - Message includes title, key fields, and Approve/Reject buttons.

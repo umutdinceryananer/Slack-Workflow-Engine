@@ -13,7 +13,7 @@ if str(ROOT) not in sys.path:
 import app as app_module  # noqa: E402
 from slack_workflow_engine import config  # noqa: E402
 from slack_workflow_engine.db import get_engine, get_session_factory  # noqa: E402
-from slack_workflow_engine.models import Base, Request  # noqa: E402
+from slack_workflow_engine.models import Base, Request, Message  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -60,16 +60,32 @@ def logger():
     return bolt_app.logger
 
 
+class DummySlackWebClient:
+    def __init__(self):
+        self.calls = []
+
+    def chat_postMessage(self, **kwargs):
+        self.calls.append(kwargs)
+        return {
+            "ok": True,
+            "channel": kwargs["channel"],
+            "ts": "1700000000.000001",
+            "message": {"thread_ts": "1700000000.000001"},
+        }
+
+
 def test_handle_view_submission_persists_request(logger, monkeypatch):
     ack_calls = []
 
     def ack(payload=None):
         ack_calls.append(payload)
 
+    slack_client = DummySlackWebClient()
     scheduled = []
 
     def fake_run_async(func, /, *args, **kwargs):
         scheduled.append((func, args, kwargs))
+        func(*args, **kwargs)
         return None
 
     monkeypatch.setattr(app_module, "run_async", fake_run_async)
@@ -90,7 +106,7 @@ def test_handle_view_submission_persists_request(logger, monkeypatch):
     app_module._handle_view_submission(
         ack=ack,
         body=body,
-        client=object(),
+        client=slack_client,
         logger=logger,
     )
 
@@ -108,6 +124,10 @@ def test_handle_view_submission_persists_request(logger, monkeypatch):
         payload = json.loads(rows[0].payload_json)
         assert payload["order_id"] == "12345"
         assert payload["amount"] == 42.5
+        messages = connection.execute(Message.__table__.select()).fetchall()
+        assert len(messages) == 1
+        assert messages[0].channel_id == "CREFUND"
+        assert slack_client.calls[0]["channel"] == "CREFUND"
 
 
 def test_handle_view_submission_missing_required(logger):
