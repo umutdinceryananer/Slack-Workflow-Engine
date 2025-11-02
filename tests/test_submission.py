@@ -60,11 +60,19 @@ def logger():
     return bolt_app.logger
 
 
-def test_handle_view_submission_persists_request(logger):
+def test_handle_view_submission_persists_request(logger, monkeypatch):
     ack_calls = []
 
     def ack(payload=None):
         ack_calls.append(payload)
+
+    scheduled = []
+
+    def fake_run_async(func, /, *args, **kwargs):
+        scheduled.append((func, args, kwargs))
+        return None
+
+    monkeypatch.setattr(app_module, "run_async", fake_run_async)
 
     body = {
         "user": {"id": "U123"},
@@ -79,9 +87,19 @@ def test_handle_view_submission_persists_request(logger):
         },
     }
 
-    app_module._handle_view_submission(ack=ack, body=body, logger=logger)
+    app_module._handle_view_submission(
+        ack=ack,
+        body=body,
+        client=object(),
+        logger=logger,
+    )
 
     assert ack_calls == [{"response_action": "clear"}]
+    assert scheduled
+    func, args, kwargs = scheduled[0]
+    assert func is app_module.publish_request_message
+    assert "request_id" in kwargs
+    assert kwargs["definition"].type == "refund"
 
     engine = get_engine()
     with engine.begin() as connection:
@@ -106,7 +124,7 @@ def test_handle_view_submission_missing_required(logger):
         },
     }
 
-    app_module._handle_view_submission(ack=ack, body=body, logger=logger)
+    app_module._handle_view_submission(ack=ack, body=body, client=object(), logger=logger)
 
     assert ack_payloads
     errors = ack_payloads[0]["errors"]
@@ -127,6 +145,6 @@ def test_handle_view_submission_invalid_metadata(logger):
         },
     }
 
-    app_module._handle_view_submission(ack=ack, body=body, logger=logger)
+    app_module._handle_view_submission(ack=ack, body=body, client=object(), logger=logger)
 
     assert ack_payloads[0]["errors"]["general"] == "Invalid workflow metadata."

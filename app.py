@@ -23,6 +23,7 @@ from slack_workflow_engine.workflows import (
     build_modal_view,
 )
 from slack_workflow_engine.workflows.commands import parse_slash_command, load_workflow_or_raise
+from slack_workflow_engine.workflows.notifications import publish_request_message
 from slack_workflow_engine.workflows.requests import (
     canonical_json,
     compute_request_key,
@@ -101,7 +102,7 @@ def _register_slash_handlers(bolt_app: SlackApp) -> None:
         _handle_request_command(ack=ack, command=command, client=client, logger=logger)
 
 
-def _handle_view_submission(ack, body, logger):
+def _handle_view_submission(ack, body, client, logger):
     view = body.get("view", {})
     metadata_raw = view.get("private_metadata", "{}")
     try:
@@ -141,7 +142,7 @@ def _handle_view_submission(ack, body, logger):
     user_id = body.get("user", {}).get("id", "unknown")
     canonical_payload = canonical_json(submission)
     request_key = compute_request_key(workflow_type, user_id, canonical_payload)
-    save_request(
+    request = save_request(
         workflow_type=workflow_type,
         created_by=user_id,
         payload_json=canonical_payload,
@@ -149,12 +150,20 @@ def _handle_view_submission(ack, body, logger):
     )
 
     ack({"response_action": "clear"})
+    run_async(
+        publish_request_message,
+        client=client,
+        definition=definition,
+        submission=submission,
+        request_id=request.id,
+        logger=logger,
+    )
 
 
 def _register_view_handlers(bolt_app: SlackApp) -> None:
     @bolt_app.view("workflow_submit")
-    def handle_submission(ack, body, logger):
-        _handle_view_submission(ack=ack, body=body, logger=logger)
+    def handle_submission(ack, body, client, logger):
+        _handle_view_submission(ack=ack, body=body, client=client, logger=logger)
 
 
 def create_app() -> Flask:
