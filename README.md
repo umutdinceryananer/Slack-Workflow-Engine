@@ -95,6 +95,13 @@ Central, configuration-driven Slack workflow bot. A single Slack app handles mul
   ```
   This drops and recreates the schema defined in `slack_workflow_engine.models`.
 
+# Health Endpoint
+- `GET /healthz` returns overall application health including:
+  - `config`: current configuration validity
+  - `db`: database connectivity
+  - `version`: app version from the `VERSION` file
+- Failing checks return HTTP `503` with diagnostic details in the JSON payload.
+
 ## FAQ / Troubleshooting
 
 **Modal doesn’t open after `/request refund`**
