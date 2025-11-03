@@ -178,7 +178,7 @@ This list translates the Part-1 scope and lock decisions into actionable issues.
   - `request_key = sha256(type + user_id + canonical_payload)` unique index enforced.
   - Action dedup based on Slack action context (or stored last decision) prevents double-processing.
 - Tests:
-  - Duplicate modal submissions dedupe to the same request; duplicate action clicks processed once.
+  - Duplicate modal submissions dedupe to the same request; duplicate action clicks processed once with a user-facing warning.
 
   Cross-References:
   - Extended by Part-2 #14 "Ordering and Deduplication Guarantees" (outbox/event-level idempotency and ordering).

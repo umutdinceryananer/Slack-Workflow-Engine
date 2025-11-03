@@ -103,6 +103,9 @@ Central, configuration-driven Slack workflow bot. A single Slack app handles mul
 **Duplicate submission raises `UNIQUE constraint failed: requests.request_key`**
 - The app deduplicates identical submissions (same user, workflow type, payload). Use a different payload for testing or clear the local DB (`sqlite3 local.db "delete from requests;"`) before re-running.
 
+**Approvers click Approve/Reject twice and nothing happens**
+- The first click decides the request; subsequent clicks return an ephemeral notice (“This request has already been decided.”). The channel message is not updated again.
+
 **Slash command returns nothing**
 - Modal handlers run asynchronously; if you still see nothing, verify that ngrok is running and the Request URL uses `https://…/slack/events`.
 - Check the Flask console for `Failed to open workflow modal` logs – they include Slack’s error code.
