@@ -25,8 +25,6 @@ def _field_to_block(field: FieldDefinition) -> Dict:
     }
     if field.type == "textarea":
         element["multiline"] = True
-    elif field.type == "number":
-        element["subtype"] = "number"
 
     block: Dict[str, object] = {
         "type": "input",

@@ -106,3 +106,21 @@ def test_build_modal_view_private_metadata(workflow_definition_fixture):
     assert metadata["workflow_type"] == "demo"
     assert metadata["fields"] == ["foo", "bar"]
 
+
+def test_number_fields_do_not_include_disallowed_keys():
+    definition = WorkflowDefinition(
+        type="numbers",
+        title="Number Form",
+        fields=[
+            {"name": "amount", "label": "Amount", "type": "number", "required": True},
+        ],
+        approvers={"strategy": "sequential", "levels": [["U1"]]},
+        notify_channel="C123",
+    )
+
+    view = build_modal_view(definition)
+
+    element = view["blocks"][0]["element"]
+    assert element["type"] == "plain_text_input"
+    assert "subtype" not in element
+
