@@ -1,4 +1,4 @@
-"""Integration-style tests for request submission and approval flow."""
+"""Integration-style tests for request submission, approval, and rejection flows."""
 
 import json
 from pathlib import Path
@@ -144,3 +144,81 @@ def test_submit_and_approve_flow(monkeypatch):
         refreshed = session.get(Request, request.id)
         assert refreshed.status == "APPROVED"
         assert refreshed.decided_by == "U1"
+
+
+def test_submit_and_reject_flow(monkeypatch):
+    bolt_logger = app_module._create_bolt_app(config.get_settings()).logger
+    slack_client = DummySlackClient()
+
+    def immediate_async(func, /, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(app_module, "run_async", immediate_async)
+
+    ack_payloads = []
+
+    def ack(payload=None):
+        ack_payloads.append(payload)
+
+    body = {
+        "user": {"id": "U123"},
+        "view": {
+            "private_metadata": json.dumps({"workflow_type": "refund"}),
+            "state": {
+                "values": {
+                    "order_id": {"order_id": {"value": "INV-002"}},
+                    "amount": {"amount": {"value": "999"}},
+                }
+            },
+        },
+    }
+
+    app_module._handle_view_submission(
+        ack=ack,
+        body=body,
+        client=slack_client,
+        logger=bolt_logger,
+    )
+
+    assert ack_payloads == [{"response_action": "clear"}]
+
+    factory = get_session_factory()
+    with factory() as session:
+        request = session.query(Request).one()
+        assert request.status == "PENDING"
+
+    ack_calls = []
+
+    def ack_action(payload=None):
+        ack_calls.append(payload)
+
+    rejection_body = {
+        "user": {"id": "U2"},
+        "actions": [
+            {
+                "value": json.dumps({"request_id": request.id, "workflow_type": "refund"}),
+            }
+        ],
+        "state": {
+            "values": {
+                "reason_block": {"reason": {"value": "Budget exceeded"}},
+            }
+        },
+    }
+
+    app_module._handle_reject_action(
+        ack=ack_action,
+        body=rejection_body,
+        client=slack_client,
+        logger=bolt_logger,
+    )
+
+    assert ack_calls == [{"response_type": "ephemeral", "text": "Request rejected."}]
+    assert slack_client.update_calls
+    reason_payload = json.dumps(slack_client.update_calls[-1]["blocks"])
+    assert "Budget exceeded" in reason_payload
+
+    with factory() as session:
+        refreshed = session.get(Request, request.id)
+        assert refreshed.status == "REJECTED"
+        assert refreshed.decided_by == "U2"
