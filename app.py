@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import json
-from uuid import uuid4
-
 from pathlib import Path
+from uuid import uuid4
 
 from flask import Flask, jsonify, request, copy_current_request_context
 from pydantic import ValidationError
@@ -13,6 +12,7 @@ from slack_bolt import App as SlackApp
 from slack_bolt.adapter.flask import SlackRequestHandler
 from slack_sdk.errors import SlackApiError
 from sqlalchemy import text
+import structlog
 
 from slack_workflow_engine.actions import is_user_authorized, parse_action_context
 from slack_workflow_engine.background import run_async
@@ -25,6 +25,7 @@ from slack_workflow_engine.models import (
     DuplicateRequestError,
     advance_request_status,
 )
+from slack_workflow_engine.logging_config import configure_logging
 from slack_workflow_engine.security import (
     SLACK_SIGNATURE_HEADER,
     SLACK_TIMESTAMP_HEADER,
@@ -462,6 +463,9 @@ def _register_action_handlers(bolt_app: SlackApp) -> None:
         _handle_reject_action(ack=ack, body=body, client=client, logger=logger)
 
 
+_LOGGING_CONFIGURED = False
+
+
 def _load_version() -> str:
     version_file = Path(__file__).resolve().parent / "VERSION"
     if version_file.exists():
@@ -471,6 +475,11 @@ def _load_version() -> str:
 
 def create_app() -> Flask:
     """Create and configure the Flask application."""
+
+    global _LOGGING_CONFIGURED
+    if not _LOGGING_CONFIGURED:
+        configure_logging()
+        _LOGGING_CONFIGURED = True
 
     settings = get_settings()
     bolt_app = _create_bolt_app(settings)

@@ -183,7 +183,7 @@ This list translates the Part-1 scope and lock decisions into actionable issues.
   Cross-References:
   - Extended by Part-2 #14 "Ordering and Deduplication Guarantees" (outbox/event-level idempotency and ordering).
 
-## 16) Deep Healthcheck `/healthz`
+## 16) Deep Healthcheck `/healthz` ✅
 - Description: Report application health including DB and config validity.
 - Acceptance Criteria:
   - Returns `{ ok: true, db: "up", config: "valid", version: "x.y.z" }` on success; version read from a `VERSION` file or package metadata.
