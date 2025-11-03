@@ -226,7 +226,14 @@ def _handle_approve_action(ack, body, client, logger):
 
     settings = get_settings()
     if not is_user_authorized(user_id, settings.approver_user_ids):
-        ack({"response_type": "ephemeral", "text": "You are not authorized to approve this request."})
+        ack()
+        channel_id = body.get("channel", {}).get("id")
+        if channel_id:
+            client.chat_postEphemeral(
+                channel=channel_id,
+                user=user_id,
+                text="You are not authorized to approve this request.",
+            )
         return
 
     submission_payload = ""
@@ -320,7 +327,14 @@ def _handle_reject_action(ack, body, client, logger):
 
     settings = get_settings()
     if not is_user_authorized(user_id, settings.approver_user_ids):
-        ack({"response_type": "ephemeral", "text": "You are not authorized to reject this request."})
+        ack()
+        channel_id = body.get("channel", {}).get("id")
+        if channel_id:
+            client.chat_postEphemeral(
+                channel=channel_id,
+                user=user_id,
+                text="You are not authorized to reject this request.",
+            )
         return
 
     submission_payload = ""

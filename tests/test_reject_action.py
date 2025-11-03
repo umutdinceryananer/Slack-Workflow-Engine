@@ -53,11 +53,15 @@ def logger():
 class DummySlackWebClient:
     def __init__(self):
         self.update_calls = []
+        self.ephemeral_calls = []
 
     def chat_update(self, **kwargs):
         self.update_calls.append(kwargs)
         return {"ok": True}
 
+    def chat_postEphemeral(self, **kwargs):
+        self.ephemeral_calls.append(kwargs)
+        return {"ok": True}
 
 def _create_request_with_message():
     request = save_request(
@@ -90,6 +94,7 @@ def test_handle_reject_action_authorized(monkeypatch, logger):
 
     body = {
         "user": {"id": "U2"},
+        "channel": {"id": "CREFUND"},
         "actions": [
             {
                 "value": json.dumps({"request_id": request.id, "workflow_type": "refund"}),
@@ -129,6 +134,7 @@ def test_handle_reject_action_unauthorized(monkeypatch, logger):
 
     body = {
         "user": {"id": "U999"},
+        "channel": {"id": "CREFUND"},
         "actions": [
             {
                 "value": json.dumps({"request_id": request.id, "workflow_type": "refund"}),
@@ -138,10 +144,11 @@ def test_handle_reject_action_unauthorized(monkeypatch, logger):
 
     app_module._handle_reject_action(ack=ack, body=body, client=slack_client, logger=logger)
 
-    assert ack_payloads == [
-        {"response_type": "ephemeral", "text": "You are not authorized to reject this request."}
-    ]
+    assert ack_payloads == [None]
     assert not slack_client.update_calls
+    assert slack_client.ephemeral_calls == [
+        {"channel": "CREFUND", "user": "U999", "text": "You are not authorized to reject this request."}
+    ]
 
     factory = get_session_factory()
     with factory() as session:

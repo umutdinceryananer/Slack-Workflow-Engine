@@ -39,7 +39,12 @@ def publish_request_message(
     except SlackApiError as exc:  # pragma: no cover - depends on Slack API behaviour
         logger.error(
             "Failed to publish workflow request message",
-            extra={"workflow_type": definition.type, "error": exc.response.get("error")},
+            extra={
+                "workflow_type": definition.type,
+                "channel": definition.notify_channel,
+                "error": exc.response.get("error"),
+                "response": getattr(exc.response, "data", {}),
+            },
         )
         return
 

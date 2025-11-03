@@ -16,23 +16,96 @@ Central, configuration-driven Slack workflow bot. A single Slack app handles mul
 - Planning/issue docs live under `Development_Documents/` and are not part of the shipped app.
 - Issue lists: `Issue_List/Issue_List_1.md`, `Issue_List/Issue_List_2.md`, `Issue_List/Issue_List_3.md`, and `Issue_List/Issue_List_Optional.md`.
 
-**Getting Started**
-- Requirements: Python 3.11+
-- Create a virtual environment and install dependencies:
-  - Windows PowerShell: `python -m venv .venv; . .venv/Scripts/Activate.ps1; pip install -r requirements.txt`
-  - macOS/Linux: `python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt`
+## Local Setup (Step by Step)
 
-**Environment Variables**
-- `SLACK_BOT_TOKEN` (xoxb-...), `SLACK_SIGNING_SECRET`
-- `APPROVER_USER_IDS` (comma-separated Slack user IDs)
-- `DATABASE_URL` (e.g., `sqlite:///local.db` for MVP)
+1. **Prerequisites**
+   - Python 3.11+
+   - A Slack workspace where you can create and install custom apps
+   - [ngrok](https://ngrok.com/download) (free tier is enough)
 
-**Run Locally (after scaffolding)**
-- `python app.py`
-- For Slack callbacks, expose `/slack/events` via a tunnel (e.g., ngrok)
+2. **Install dependencies**
+   ```powershell
+   # Windows PowerShell
+   python -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   pip install -r requirements.txt
+   ```
+   ```bash
+   # macOS / Linux
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   ```
 
-**Tests**
-- `pytest -q`
+3. **Create the Slack app**
+   - Go to `https://api.slack.com/apps` → “Create New App (from scratch)”.
+   - Add bot scopes under **OAuth & Permissions**: `commands`, `chat:write`, `views:open`, `views:write` (optionally `chat:write.public`).
+   - Configure the slash command `/request` and Interactivity URL (both will point to your ngrok URL + `/slack/events`).
+   - Install/Reinstall the app to your workspace to obtain a Bot User OAuth token.
+   - Copy the **Signing Secret** from **Basic Information**.
+   - Invite the bot user to the channel referenced in your workflow config.
+
+4. **Populate environment variables**
+   - Copy `.env.example` to `.env` and fill in:
+     - `SLACK_BOT_TOKEN` (xoxb-…)
+     - `SLACK_SIGNING_SECRET`
+     - `APPROVER_USER_IDS` (comma-separated Slack user IDs, e.g. `U123,U456`)
+     - `DATABASE_URL` (`sqlite:///local.db` is fine for local runs)
+   - Before running the app in a PowerShell session, load the variables:
+     ```powershell
+     Get-Content .env | ForEach-Object {
+         if ($_ -match '^\s*#' -or $_ -eq '') { return }
+         $name, $value = $_ -split '=', 2
+         [System.Environment]::SetEnvironmentVariable($name.Trim(), $value.Trim(), 'Process')
+     }
+     ```
+
+5. **Prepare the database schema (first run only)**
+   ```powershell
+   python -c "from slack_workflow_engine.db import Base, get_engine; Base.metadata.create_all(get_engine())"
+   ```
+   Subsequent runs reuse the same SQLite file.
+
+6. **Expose the local server to Slack**
+   ```powershell
+   ngrok http 3000
+   ```
+   Update the slash command and interactivity URLs with the HTTPS endpoint that ngrok prints (e.g. `https://abcd1234.ngrok-free.dev/slack/events`).
+
+7. **Run the application**
+   ```powershell
+   python app.py
+   ```
+   The app binds to port `3000`; ngrok forwards Slack traffic to `/slack/events`.
+
+8. **Manual E2E smoke test**
+   - In Slack, run `/request refund`, fill the modal, and submit.
+   - A channel message appears with Approve/Reject buttons; only `APPROVER_USER_IDS` can confirm.
+   - Approving or rejecting updates the database and edits the Slack message. Unauthorized users receive an ephemeral warning.
+
+9. **Run automated tests**
+   ```bash
+   pytest -q
+   ```
+
+## FAQ / Troubleshooting
+
+**Modal doesn’t open after `/request refund`**
+- Ensure the slash command form was saved with the correct ngrok URL.
+- Reinstall the Slack app after changing scopes or command settings.
+- Confirm the bot is invited to the channel (Slack returns `not_in_channel` otherwise).
+
+**Channel message fails with `invalid_auth` or `channel_not_found`**
+- Check that `SLACK_BOT_TOKEN` matches the workspace where you’re testing.
+- Update `workflows/refund.json` → `notify_channel` with the actual channel ID (Channel details → “Copy channel ID”).
+- Invite the bot user to that channel before testing.
+
+**Duplicate submission raises `UNIQUE constraint failed: requests.request_key`**
+- The app deduplicates identical submissions (same user, workflow type, payload). Use a different payload for testing or clear the local DB (`sqlite3 local.db "delete from requests;"`) before re-running.
+
+**Slash command returns nothing**
+- Modal handlers run asynchronously; if you still see nothing, verify that ngrok is running and the Request URL uses `https://…/slack/events`.
+- Check the Flask console for `Failed to open workflow modal` logs – they include Slack’s error code.
 
 **CI/CD**
 - A basic GitHub Actions workflow (tests) is introduced early; advanced pipeline and security scans arrive in Phase-3.

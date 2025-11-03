@@ -126,8 +126,9 @@ def test_handle_view_submission_persists_request(logger, monkeypatch):
         assert payload["amount"] == 42.5
         messages = connection.execute(Message.__table__.select()).fetchall()
         assert len(messages) == 1
-        assert messages[0].channel_id == "CREFUND"
-        assert slack_client.calls[0]["channel"] == "CREFUND"
+        expected_channel = kwargs["definition"].notify_channel
+        assert messages[0].channel_id == expected_channel
+        assert slack_client.calls[0]["channel"] == expected_channel
 
 
 def test_handle_view_submission_missing_required(logger):
