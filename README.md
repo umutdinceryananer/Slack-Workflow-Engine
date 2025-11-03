@@ -88,6 +88,13 @@ Central, configuration-driven Slack workflow bot. A single Slack app handles mul
    pytest -q
    ```
 
+### Resetting your local database
+- If you want to start from a clean slate, load your `.env` values and run:
+  ```bash
+  python scripts/reset_local_db.py
+  ```
+  This drops and recreates the schema defined in `slack_workflow_engine.models`.
+
 ## FAQ / Troubleshooting
 
 **Modal doesn’t open after `/request refund`**
