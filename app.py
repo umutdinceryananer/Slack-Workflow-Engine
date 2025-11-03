@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from uuid import uuid4
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, copy_current_request_context
 from pydantic import ValidationError
 from slack_bolt import App as SlackApp
 from slack_bolt.adapter.flask import SlackRequestHandler
@@ -75,9 +75,12 @@ def _load_workflow_definition_by_type(workflow_type: str):
 
 
 def _open_modal(client, trigger_id: str, view: dict, workflow_type: str, logger) -> None:
+    print("[debug] Attempting to open modal", trigger_id, workflow_type)
     try:
         client.views_open(trigger_id=trigger_id, view=view)
+        print("[debug] Modal opened OK")
     except SlackApiError as exc:  # pragma: no cover - network dependent
+        print("[debug] Modal open failed:", exc.response.get("error"))
         logger.error(
             "Failed to open workflow modal",
             extra={"workflow_type": workflow_type, "error": exc.response.get("error")},
@@ -85,8 +88,10 @@ def _open_modal(client, trigger_id: str, view: dict, workflow_type: str, logger)
 
 
 def _handle_request_command(ack, command, client, logger):
+    print("[debug] Slash payload:", command)
     try:
         context = parse_slash_command(command.get("text") or "")
+        print("[debug] Parsed workflow_type:", context.workflow_type)
     except ValueError as exc:
         ack({"response_type": "ephemeral", "text": str(exc)})
         return
@@ -103,6 +108,7 @@ def _handle_request_command(ack, command, client, logger):
 
     view = build_modal_view(definition)
     trigger_id = command.get("trigger_id")
+    print("[debug] Trigger ID:", trigger_id)
     ack()
     run_async(_open_modal, client, trigger_id, view, context.workflow_type, logger)
 
@@ -405,6 +411,7 @@ def create_app() -> Flask:
     bolt_app = _create_bolt_app(settings)
     handler = SlackRequestHandler(bolt_app)
     flask_app = Flask(__name__)
+    flask_app.logger.setLevel("INFO")
 
     _register_error_handlers(flask_app)
     _register_slash_handlers(bolt_app)
@@ -416,6 +423,8 @@ def create_app() -> Flask:
         raw_body = request.get_data(as_text=True)
         timestamp = request.headers.get(SLACK_TIMESTAMP_HEADER, "")
         signature = request.headers.get(SLACK_SIGNATURE_HEADER, "")
+        print("[debug] Incoming /slack/events headers:", dict(request.headers))
+        print("[debug] Incoming /slack/events body:", raw_body)
         if not is_valid_slack_request(
             signing_secret=settings.signing_secret,
             timestamp=timestamp,
@@ -426,6 +435,7 @@ def create_app() -> Flask:
             response.status_code = 401
             return response
 
+        @copy_current_request_context
         def process_request():
             handler.handle(request)
 
@@ -441,4 +451,4 @@ def create_app() -> Flask:
 
 if __name__ == "__main__":  # pragma: no cover - manual execution helper
     application = create_app()
-    application.run(host="0.0.0.0", port=3000, debug=True)
+    application.run(host="0.0.0.0", port=3000, debug=False, use_reloader=False)

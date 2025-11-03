@@ -8,7 +8,7 @@
   ],
   "approvers": {
     "strategy": "sequential",
-    "levels": [["U123"], ["U456"]]
+    "levels": [["U09PY3D5ASK"]]
   },
-  "notify_channel": "CREFUND"
+  "notify_channel": "C09QA3GA5RB"
 }
