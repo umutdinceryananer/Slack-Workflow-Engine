@@ -13,6 +13,7 @@ if str(ROOT) not in sys.path:
 from slack_workflow_engine.workflows import (  # noqa: E402
     WorkflowDefinition,
     build_request_message,
+    build_request_decision_update,
     FieldDefinition,
     ApproverConfig,
     APPROVE_ACTION_ID,
@@ -64,3 +65,20 @@ def test_missing_field_uses_placeholder(workflow_definition):
     assert "*Order ID:* B-456" in text
     assert "*Amount:* _Not provided_" in text
 
+
+def test_build_request_decision_update_replaces_buttons(workflow_definition):
+    submission = {"order_id": "C-001", "amount": 10}
+
+    updated = build_request_decision_update(
+        definition=workflow_definition,
+        submission=submission,
+        request_id=77,
+        decision="APPROVED",
+        decided_by="U777",
+    )
+
+    blocks = updated["blocks"]
+    assert blocks[-1]["type"] == "context"
+    context_text = blocks[-1]["elements"][0]["text"]
+    assert "Approved" in context_text
+    assert "U777" in context_text

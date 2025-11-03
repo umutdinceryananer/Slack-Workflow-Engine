@@ -17,7 +17,11 @@ class DummyWebClient:
         self.calls = []
 
     def chat_postMessage(self, **kwargs):
-        self.calls.append(kwargs)
+        self.calls.append(("post", kwargs))
+        return {"ok": True, "message": kwargs}
+
+    def chat_update(self, **kwargs):
+        self.calls.append(("update", kwargs))
         return {"ok": True, "message": kwargs}
 
 
@@ -33,8 +37,30 @@ def test_post_message_uses_underlying_client():
     response = client.post_message(channel="C123", text="hello", blocks=[{"type": "section"}])
 
     assert dummy.calls == [
-        {"channel": "C123", "text": "hello", "blocks": [{"type": "section"}]},
+        ("post", {"channel": "C123", "text": "hello", "blocks": [{"type": "section"}]}),
     ]
     assert response["ok"] is True
     assert client.client is dummy
 
+
+def test_update_message_uses_underlying_client():
+    dummy = DummyWebClient()
+    client = SlackClient(client=dummy)
+
+    response = client.update_message(
+        channel="C123",
+        ts="123.456",
+        text="updated",
+        blocks=[{"type": "section", "text": {"type": "mrkdwn", "text": "Hi"}}],
+    )
+
+    assert dummy.calls[-1] == (
+        "update",
+        {
+            "channel": "C123",
+            "ts": "123.456",
+            "text": "updated",
+            "blocks": [{"type": "section", "text": {"type": "mrkdwn", "text": "Hi"}}],
+        },
+    )
+    assert response["ok"] is True

@@ -11,8 +11,16 @@ from slack_bolt import App as SlackApp
 from slack_bolt.adapter.flask import SlackRequestHandler
 from slack_sdk.errors import SlackApiError
 
+from slack_workflow_engine.actions import is_user_authorized, parse_action_context
 from slack_workflow_engine.background import run_async
 from slack_workflow_engine.config import AppSettings, get_settings
+from slack_workflow_engine.db import session_scope
+from slack_workflow_engine.models import (
+    Request,
+    StatusTransitionError,
+    OptimisticLockError,
+    advance_request_status,
+)
 from slack_workflow_engine.security import (
     SLACK_SIGNATURE_HEADER,
     SLACK_TIMESTAMP_HEADER,
@@ -21,9 +29,13 @@ from slack_workflow_engine.security import (
 from slack_workflow_engine.workflows import (
     WORKFLOW_DEFINITION_DIR,
     build_modal_view,
+    APPROVE_ACTION_ID,
 )
 from slack_workflow_engine.workflows.commands import parse_slash_command, load_workflow_or_raise
-from slack_workflow_engine.workflows.notifications import publish_request_message
+from slack_workflow_engine.workflows.notifications import (
+    publish_request_message,
+    update_request_message,
+)
 from slack_workflow_engine.workflows.requests import (
     canonical_json,
     compute_request_key,
@@ -166,6 +178,106 @@ def _register_view_handlers(bolt_app: SlackApp) -> None:
         _handle_view_submission(ack=ack, body=body, client=client, logger=logger)
 
 
+def _handle_approve_action(ack, body, client, logger):
+    actions = body.get("actions") or []
+    try:
+        action_payload = actions[0]
+    except IndexError:
+        ack({"response_type": "ephemeral", "text": "Unable to process this action payload."})
+        return
+
+    try:
+        context = parse_action_context(action_payload.get("value", ""))
+    except ValueError:
+        ack({"response_type": "ephemeral", "text": "This action payload is invalid. Please retry from Slack."})
+        return
+
+    user_id = body.get("user", {}).get("id")
+    if not user_id:
+        ack({"response_type": "ephemeral", "text": "We could not identify the acting user."})
+        return
+
+    settings = get_settings()
+    if not is_user_authorized(user_id, settings.approver_user_ids):
+        ack({"response_type": "ephemeral", "text": "You are not authorized to approve this request."})
+        return
+
+    submission_payload = ""
+    channel_id = ""
+    ts = ""
+    with session_scope() as session:
+        request = session.get(Request, context.request_id)
+        if request is None:
+            ack({"response_type": "ephemeral", "text": "Request could not be found."})
+            return
+
+        if request.type != context.workflow_type:
+            ack({"response_type": "ephemeral", "text": "Workflow type mismatch for this request."})
+            return
+
+        message = request.message
+        if message is None:
+            ack({"response_type": "ephemeral", "text": "Request message is not yet available."})
+            return
+
+        submission_payload = request.payload_json
+        channel_id = message.channel_id
+        ts = message.ts
+
+        try:
+            advance_request_status(
+                session,
+                request,
+                new_status="APPROVED",
+                decided_by=user_id,
+            )
+        except StatusTransitionError:
+            ack({"response_type": "ephemeral", "text": "This request has already been decided."})
+            return
+        except OptimisticLockError:
+            ack({"response_type": "ephemeral", "text": "Request was updated concurrently. Please try again."})
+            return
+
+    ack({"response_type": "ephemeral", "text": "Request approved."})
+
+    try:
+        definition = load_workflow_or_raise(context.workflow_type)
+    except (FileNotFoundError, ValidationError):
+        logger.exception(
+            "Unable to load workflow definition during approval",
+            extra={"workflow_type": context.workflow_type},
+        )
+        return
+
+    try:
+        submission = json.loads(submission_payload) if submission_payload else {}
+    except json.JSONDecodeError:
+        logger.exception(
+            "Stored payload_json is invalid JSON",
+            extra={"request_id": context.request_id},
+        )
+        submission = {}
+
+    run_async(
+        update_request_message,
+        client=client,
+        definition=definition,
+        submission=submission,
+        request_id=context.request_id,
+        decision="APPROVED",
+        decided_by=user_id,
+        channel_id=channel_id,
+        ts=ts,
+        logger=logger,
+    )
+
+
+def _register_action_handlers(bolt_app: SlackApp) -> None:
+    @bolt_app.action(APPROVE_ACTION_ID)
+    def handle_approve(ack, body, client, logger):
+        _handle_approve_action(ack=ack, body=body, client=client, logger=logger)
+
+
 def create_app() -> Flask:
     """Create and configure the Flask application."""
 
@@ -177,6 +289,7 @@ def create_app() -> Flask:
     _register_error_handlers(flask_app)
     _register_slash_handlers(bolt_app)
     _register_view_handlers(bolt_app)
+    _register_action_handlers(bolt_app)
 
     @flask_app.route("/slack/events", methods=["POST"])
     def slack_events():

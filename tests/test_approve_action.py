@@ -1,0 +1,142 @@
+"""Tests for the approve action handler."""
+
+import json
+from pathlib import Path
+import sys
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+import app as app_module  # noqa: E402
+from slack_workflow_engine import config  # noqa: E402
+from slack_workflow_engine.db import Base, get_engine, get_session_factory  # noqa: E402
+from slack_workflow_engine.models import Request  # noqa: E402
+from slack_workflow_engine.workflows.requests import canonical_json  # noqa: E402
+from slack_workflow_engine.workflows.storage import (
+    save_message_reference,
+    save_request,
+)  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def configure_environment(monkeypatch, tmp_path):
+    db_path = tmp_path / "actions.db"
+    monkeypatch.setenv("SLACK_BOT_TOKEN", "token")
+    monkeypatch.setenv("SLACK_SIGNING_SECRET", "secret")
+    monkeypatch.setenv("APPROVER_USER_IDS", "U123,U456")
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path}")
+
+    config.get_settings.cache_clear()
+    get_engine.cache_clear()
+    get_session_factory.cache_clear()
+
+    engine = get_engine()
+    Base.metadata.create_all(engine)
+
+    yield
+
+    Base.metadata.drop_all(engine)
+    config.get_settings.cache_clear()
+    get_engine.cache_clear()
+    get_session_factory.cache_clear()
+
+
+@pytest.fixture
+def logger():
+    bolt_app = app_module._create_bolt_app(config.get_settings())
+    return bolt_app.logger
+
+
+class DummySlackWebClient:
+    def __init__(self):
+        self.update_calls = []
+
+    def chat_update(self, **kwargs):
+        self.update_calls.append(kwargs)
+        return {"ok": True}
+
+
+def _create_request_with_message():
+    submission = {"order_id": "12345"}
+    request = save_request(
+        workflow_type="refund",
+        created_by="U222",
+        payload_json=canonical_json(submission),
+        request_key="key-approve",
+    )
+    save_message_reference(
+        request_id=request.id,
+        channel_id="CREFUND",
+        ts="1700000000.555",
+    )
+    return request
+
+
+def test_handle_approve_action_authorized(monkeypatch, logger):
+    request = _create_request_with_message()
+    ack_payloads = []
+
+    def ack(payload=None):
+        ack_payloads.append(payload)
+
+    slack_client = DummySlackWebClient()
+
+    def immediate_run_async(func, /, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(app_module, "run_async", immediate_run_async)
+
+    body = {
+        "user": {"id": "U123"},
+        "actions": [
+            {
+                "value": json.dumps({"request_id": request.id, "workflow_type": "refund"}),
+            }
+        ],
+    }
+
+    app_module._handle_approve_action(ack=ack, body=body, client=slack_client, logger=logger)
+
+    assert ack_payloads == [{"response_type": "ephemeral", "text": "Request approved."}]
+    assert slack_client.update_calls
+
+    factory = get_session_factory()
+    with factory() as session:
+        refreshed = session.get(Request, request.id)
+        assert refreshed.status == "APPROVED"
+        assert refreshed.decided_by == "U123"
+
+
+def test_handle_approve_action_unauthorized(monkeypatch, logger):
+    request = _create_request_with_message()
+    ack_payloads = []
+
+    def ack(payload=None):
+        ack_payloads.append(payload)
+
+    slack_client = DummySlackWebClient()
+    monkeypatch.setattr(app_module, "run_async", lambda func, /, *args, **kwargs: func(*args, **kwargs))
+
+    body = {
+        "user": {"id": "U999"},
+        "actions": [
+            {
+                "value": json.dumps({"request_id": request.id, "workflow_type": "refund"}),
+            }
+        ],
+    }
+
+    app_module._handle_approve_action(ack=ack, body=body, client=slack_client, logger=logger)
+
+    assert ack_payloads == [
+        {"response_type": "ephemeral", "text": "You are not authorized to approve this request."}
+    ]
+    assert not slack_client.update_calls
+
+    factory = get_session_factory()
+    with factory() as session:
+        refreshed = session.get(Request, request.id)
+        assert refreshed.status == "PENDING"

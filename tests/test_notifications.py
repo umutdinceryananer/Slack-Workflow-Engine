@@ -18,7 +18,10 @@ from slack_workflow_engine.workflows import (
     FieldDefinition,
     WorkflowDefinition,
 )  # noqa: E402
-from slack_workflow_engine.workflows.notifications import publish_request_message  # noqa: E402
+from slack_workflow_engine.workflows.notifications import (  # noqa: E402
+    publish_request_message,
+    update_request_message,
+)
 from slack_workflow_engine.workflows.requests import canonical_json  # noqa: E402
 from slack_workflow_engine.workflows.storage import save_request  # noqa: E402
 
@@ -57,8 +60,12 @@ class DummyWebClient:
         }
 
     def chat_postMessage(self, **kwargs):
-        self.calls.append(kwargs)
+        self.calls.append(("post", kwargs))
         return self.response
+
+    def chat_update(self, **kwargs):
+        self.calls.append(("update", kwargs))
+        return {"ok": True}
 
 
 class DummyLogger:
@@ -145,3 +152,35 @@ def test_publish_request_message_missing_identifiers(workflow_definition):
         rows = connection.execute(Message.__table__.select()).fetchall()
         assert not rows
     assert logger.warnings
+
+
+def test_update_request_message_updates_slack(workflow_definition):
+    dummy_client = DummyWebClient()
+    logger = DummyLogger()
+
+    submission = {"order_id": "X-3"}
+    request = save_request(
+        workflow_type=workflow_definition.type,
+        created_by="U123",
+        payload_json=canonical_json(submission),
+        request_key="key-789",
+    )
+
+    update_request_message(
+        client=dummy_client,
+        definition=workflow_definition,
+        submission=submission,
+        request_id=request.id,
+        decision="APPROVED",
+        decided_by="U999",
+        channel_id="CREFUND",
+        ts="1700000000.123456",
+        logger=logger,
+    )
+
+    assert dummy_client.calls[-1][0] == "update"
+    update_kwargs = dummy_client.calls[-1][1]
+    assert update_kwargs["channel"] == "CREFUND"
+    assert update_kwargs["ts"] == "1700000000.123456"
+    assert ":white_check_mark:" in json.dumps(update_kwargs["blocks"])
+    assert not logger.errors

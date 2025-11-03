@@ -8,7 +8,7 @@ from slack_sdk.errors import SlackApiError
 
 from slack_workflow_engine.slack_client import SlackClient
 
-from .messages import build_request_message
+from .messages import build_request_message, build_request_decision_update
 from .models import WorkflowDefinition
 from .storage import save_message_reference
 
@@ -63,3 +63,44 @@ def publish_request_message(
         ts=ts,
         thread_ts=thread_ts,
     )
+
+
+def update_request_message(
+    *,
+    client,
+    definition: WorkflowDefinition,
+    submission: Mapping[str, Any],
+    request_id: int,
+    decision: str,
+    decided_by: str,
+    channel_id: str,
+    ts: str,
+    logger,
+) -> None:
+    """Update an existing Slack message to reflect the latest decision."""
+
+    slack_client = SlackClient(client=client)
+    payload = build_request_decision_update(
+        definition=definition,
+        submission=submission,
+        request_id=request_id,
+        decision=decision,
+        decided_by=decided_by,
+    )
+
+    try:
+        slack_client.update_message(
+            channel=channel_id,
+            ts=ts,
+            text=payload["text"],
+            blocks=payload["blocks"],
+        )
+    except SlackApiError as exc:  # pragma: no cover - depends on Slack API behaviour
+        logger.error(
+            "Failed to update workflow request message",
+            extra={
+                "workflow_type": definition.type,
+                "request_id": request_id,
+                "error": exc.response.get("error"),
+            },
+        )

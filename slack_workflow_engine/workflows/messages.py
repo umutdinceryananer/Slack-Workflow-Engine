@@ -42,8 +42,11 @@ def _build_fields_section(definition: WorkflowDefinition, submission: Dict[str, 
     }
 
 
-def _decision_buttons_payload(request_id: int, workflow_type: str) -> Dict[str, Any]:
-    payload = json.dumps({"request_id": request_id, "workflow_type": workflow_type}, separators=(",", ":"))
+def _decision_buttons_payload(request_id: int, workflow_type: str, approver_level: int | None = None) -> Dict[str, Any]:
+    payload_obj: Dict[str, Any] = {"request_id": request_id, "workflow_type": workflow_type}
+    if approver_level is not None:
+        payload_obj["level"] = approver_level
+    payload = json.dumps(payload_obj, separators=(",", ":"))
     return {
         "type": "actions",
         "block_id": "workflow_decision_buttons",
@@ -80,6 +83,7 @@ def build_request_message(
     definition: WorkflowDefinition,
     submission: Dict[str, Any],
     request_id: int,
+    approver_level: int | None = None,
 ) -> Dict[str, Any]:
     """Build the canonical Slack message payload for a workflow request."""
 
@@ -94,11 +98,11 @@ def build_request_message(
             "elements": [
                 {
                     "type": "mrkdwn",
-                    "text": f"• Workflow: `{definition.type}` • Request ID: `{request_id}`",
+                    "text": f"- Workflow: `{definition.type}` - Request ID: `{request_id}`",
                 }
             ],
         },
-        _decision_buttons_payload(request_id, definition.type),
+        _decision_buttons_payload(request_id, definition.type, approver_level),
     ]
 
     return {
@@ -106,3 +110,44 @@ def build_request_message(
         "blocks": blocks,
     }
 
+
+_DECISION_EMOJI = {
+    "APPROVED": ":white_check_mark:",
+    "REJECTED": ":no_entry_sign:",
+}
+
+
+def build_request_decision_update(
+    *,
+    definition: WorkflowDefinition,
+    submission: Dict[str, Any],
+    request_id: int,
+    decision: str,
+    decided_by: str,
+) -> Dict[str, Any]:
+    """Return an updated Slack message payload after a decision."""
+
+    base = build_request_message(
+        definition=definition,
+        submission=submission,
+        request_id=request_id,
+    )
+    blocks = list(base["blocks"][:-1])  # drop the action buttons
+
+    emoji = _DECISION_EMOJI.get(decision.upper(), ":information_source:")
+    decision_label = decision.capitalize()
+    decision_block = {
+        "type": "context",
+        "elements": [
+            {
+                "type": "mrkdwn",
+                "text": f"{emoji} {decision_label} by <@{decided_by}>",
+            }
+        ],
+    }
+    blocks.append(decision_block)
+
+    return {
+        "text": f"{base['text']} {decision_label} by <@{decided_by}>.",
+        "blocks": blocks,
+    }
