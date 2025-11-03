@@ -26,7 +26,11 @@ def test_health_endpoint_returns_ok(monkeypatch):
     with flask_app.test_client() as client:
         response = client.get("/healthz")
         assert response.status_code == 200
-        assert response.get_json() == {"ok": True, "config": "valid", "db": "up"}
+        data = response.get_json()
+        assert data["ok"] is True
+        assert data["config"] == "valid"
+        assert data["db"] == "up"
+        assert "version" in data
 
 
 def test_health_endpoint_reports_db_down(monkeypatch):

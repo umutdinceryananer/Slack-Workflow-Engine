@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from uuid import uuid4
 
+from pathlib import Path
+
 from flask import Flask, jsonify, request, copy_current_request_context
 from pydantic import ValidationError
 from slack_bolt import App as SlackApp
@@ -460,6 +462,13 @@ def _register_action_handlers(bolt_app: SlackApp) -> None:
         _handle_reject_action(ack=ack, body=body, client=client, logger=logger)
 
 
+def _load_version() -> str:
+    version_file = Path(__file__).resolve().parent / "VERSION"
+    if version_file.exists():
+        return version_file.read_text(encoding="utf-8").strip()
+    return "unknown"
+
+
 def create_app() -> Flask:
     """Create and configure the Flask application."""
 
@@ -467,6 +476,7 @@ def create_app() -> Flask:
     bolt_app = _create_bolt_app(settings)
     handler = SlackRequestHandler(bolt_app)
     flask_app = Flask(__name__)
+    flask_app.config["APP_VERSION"] = _load_version()
     flask_app.logger.setLevel("INFO")
 
     _register_error_handlers(flask_app)
@@ -499,6 +509,7 @@ def create_app() -> Flask:
     @flask_app.route("/healthz", methods=["GET"])
     def healthz():
         health: dict[str, object] = {"ok": True}
+        health["version"] = flask_app.config.get("APP_VERSION", "unknown")
 
         try:
             get_settings()
