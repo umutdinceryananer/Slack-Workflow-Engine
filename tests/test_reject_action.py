@@ -154,3 +154,52 @@ def test_handle_reject_action_unauthorized(monkeypatch, logger):
     with factory() as session:
         refreshed = session.get(Request, request.id)
         assert refreshed.status == "PENDING"
+
+
+def test_handle_reject_action_self_guard(monkeypatch, logger):
+    monkeypatch.setenv("APPROVER_USER_IDS", "U1,U2,U9")
+    config.get_settings.cache_clear()
+
+    submission = {"order_id": "SELF-2"}
+    request = save_request(
+        workflow_type="refund",
+        created_by="U9",
+        payload_json=canonical_json(submission),
+        request_key="key-self-reject",
+    )
+    save_message_reference(
+        request_id=request.id,
+        channel_id="CSELF",
+        ts="1700000000.333",
+    )
+
+    ack_payloads = []
+
+    def ack(payload=None):
+        ack_payloads.append(payload)
+
+    slack_client = DummySlackWebClient()
+    monkeypatch.setattr(app_module, "run_async", lambda func, /, *args, **kwargs: func(*args, **kwargs))
+
+    body = {
+        "user": {"id": "U9"},
+        "channel": {"id": "CSELF"},
+        "actions": [
+            {
+                "value": json.dumps({"request_id": request.id, "workflow_type": "refund"}),
+            }
+        ],
+    }
+
+    app_module._handle_reject_action(ack=ack, body=body, client=slack_client, logger=logger)
+
+    assert ack_payloads == [None]
+    assert not slack_client.update_calls
+    assert slack_client.ephemeral_calls == [
+        {"channel": "CSELF", "user": "U9", "text": "You cannot reject your own request."}
+    ]
+
+    factory = get_session_factory()
+    with factory() as session:
+        refreshed = session.get(Request, request.id)
+        assert refreshed.status == "PENDING"

@@ -365,6 +365,15 @@ def _handle_reject_action(ack, body, client, logger):
             ack({"response_type": "ephemeral", "text": "Request message is not yet available."})
             return
 
+        if request.created_by == user_id:
+            ack()
+            client.chat_postEphemeral(
+                channel=message.channel_id,
+                user=user_id,
+                text="You cannot reject your own request.",
+            )
+            return
+
         submission_payload = request.payload_json
         channel_id = message.channel_id
         ts = message.ts
