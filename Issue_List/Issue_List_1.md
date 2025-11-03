@@ -144,7 +144,7 @@ This list translates the Part-1 scope and lock decisions into actionable issues.
   - Extended by Part-2 #7/#9 "Levels & Message Updates" (multi-level approvals and richer updates).
   - Related to Part-2 #15 "Revise/Resubmit Cycle and Cancel/Rollback" (post-reject flows).
  
-## E2E Manual Test (after Issue 13)
+## E2E Manual Test (after Issue 13) ✅
 - When to run: after Issue 10–13 are complete (slash → modal → persist → channel message → approve/reject).
 - Slack App setup:
   - Create an app in your workspace; obtain Bot Token and Signing Secret.
