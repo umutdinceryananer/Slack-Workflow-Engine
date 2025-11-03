@@ -194,7 +194,7 @@ This list translates the Part-1 scope and lock decisions into actionable issues.
   Cross-References:
   - Complements Part-2 #18 "Prometheus Metrics Endpoint (Phase-2)" (metrics exposed alongside health).
 
-## 17) Structured Logging with Correlation
+## 17) Structured Logging with Correlation ✅
 - Description: Log with `structlog` in JSON and include correlation fields.
 - Acceptance Criteria:
   - Events: `request_created`, `approved`, `rejected`, `unauthorized_attempt`, `webhook_failed`.

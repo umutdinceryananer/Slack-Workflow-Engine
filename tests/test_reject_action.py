@@ -63,6 +63,13 @@ class DummySlackWebClient:
         self.ephemeral_calls.append(kwargs)
         return {"ok": True}
 
+def _run_async_sync(func, /, *args, **kwargs):
+    """Execute run_async workloads synchronously while ignoring trace context metadata."""
+
+    kwargs.pop("trace_id", None)
+    return func(*args, **kwargs)
+
+
 def _create_request_with_message():
     request = save_request(
         workflow_type="refund",
@@ -87,10 +94,7 @@ def test_handle_reject_action_authorized(monkeypatch, logger):
 
     slack_client = DummySlackWebClient()
 
-    def immediate_async(func, /, *args, **kwargs):
-        return func(*args, **kwargs)
-
-    monkeypatch.setattr(app_module, "run_async", immediate_async)
+    monkeypatch.setattr(app_module, "run_async", _run_async_sync)
 
     body = {
         "user": {"id": "U2"},
@@ -130,7 +134,7 @@ def test_handle_reject_action_unauthorized(monkeypatch, logger):
         ack_payloads.append(payload)
 
     slack_client = DummySlackWebClient()
-    monkeypatch.setattr(app_module, "run_async", lambda func, /, *args, **kwargs: func(*args, **kwargs))
+    monkeypatch.setattr(app_module, "run_async", _run_async_sync)
 
     body = {
         "user": {"id": "U999"},
@@ -179,7 +183,7 @@ def test_handle_reject_action_self_guard(monkeypatch, logger):
         ack_payloads.append(payload)
 
     slack_client = DummySlackWebClient()
-    monkeypatch.setattr(app_module, "run_async", lambda func, /, *args, **kwargs: func(*args, **kwargs))
+    monkeypatch.setattr(app_module, "run_async", _run_async_sync)
 
     body = {
         "user": {"id": "U9"},
@@ -214,7 +218,7 @@ def test_handle_reject_action_duplicate_click(monkeypatch, logger):
         ack_payloads.append(payload)
 
     slack_client = DummySlackWebClient()
-    monkeypatch.setattr(app_module, "run_async", lambda func, /, *args, **kwargs: func(*args, **kwargs))
+    monkeypatch.setattr(app_module, "run_async", _run_async_sync)
 
     body = {
         "user": {"id": "U2"},

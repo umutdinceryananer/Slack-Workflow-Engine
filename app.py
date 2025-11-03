@@ -6,7 +6,55 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 from __future__ import annotations
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -18,7 +66,31 @@ import json
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 from pathlib import Path
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -30,7 +102,43 @@ from uuid import uuid4
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 from flask import Flask, jsonify, request, copy_current_request_context
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -38,7 +146,31 @@ from pydantic import ValidationError
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 from slack_bolt import App as SlackApp
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -46,7 +178,31 @@ from slack_bolt.adapter.flask import SlackRequestHandler
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 from slack_sdk.errors import SlackApiError
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -54,7 +210,44 @@ from sqlalchemy import text
 
 
 
-import structlog
+
+
+
+
+
+
+
+
+
+
+
+
+import structlog
+from structlog.contextvars import bind_contextvars, unbind_contextvars
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -66,7 +259,31 @@ from slack_workflow_engine.actions import is_user_authorized, parse_action_conte
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 from slack_workflow_engine.background import run_async
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -74,7 +291,31 @@ from slack_workflow_engine.config import AppSettings, get_settings
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 from slack_workflow_engine.db import session_scope
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -82,7 +323,31 @@ from slack_workflow_engine.models import (
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
     Request,
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -90,7 +355,31 @@ from slack_workflow_engine.models import (
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
     OptimisticLockError,
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -98,11 +387,47 @@ from slack_workflow_engine.models import (
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
     advance_request_status,
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 )
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -110,7 +435,31 @@ from slack_workflow_engine.logging_config import configure_logging
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 from slack_workflow_engine.security import (
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -118,7 +467,31 @@ from slack_workflow_engine.security import (
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
     SLACK_TIMESTAMP_HEADER,
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -126,7 +499,31 @@ from slack_workflow_engine.security import (
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 )
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -134,7 +531,31 @@ from slack_workflow_engine.workflows import (
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
     WORKFLOW_DEFINITION_DIR,
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -142,7 +563,31 @@ from slack_workflow_engine.workflows import (
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
     APPROVE_ACTION_ID,
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -150,7 +595,31 @@ from slack_workflow_engine.workflows import (
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 )
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -158,7 +627,31 @@ from slack_workflow_engine.workflows.commands import parse_slash_command, load_w
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 from slack_workflow_engine.workflows.notifications import (
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -166,11 +659,47 @@ from slack_workflow_engine.workflows.notifications import (
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
     update_request_message,
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 )
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -178,7 +707,31 @@ from slack_workflow_engine.workflows.requests import (
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
     canonical_json,
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -186,11 +739,47 @@ from slack_workflow_engine.workflows.requests import (
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
     parse_submission,
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 )
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -206,7 +795,55 @@ from slack_workflow_engine.workflows.storage import save_request
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def _create_bolt_app(settings: AppSettings) -> SlackApp:
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -218,7 +855,43 @@ def _create_bolt_app(settings: AppSettings) -> SlackApp:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     return SlackApp(
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -226,7 +899,31 @@ def _create_bolt_app(settings: AppSettings) -> SlackApp:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
         signing_secret=settings.signing_secret,
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -234,7 +931,55 @@ def _create_bolt_app(settings: AppSettings) -> SlackApp:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
     )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -250,7 +995,43 @@ def _register_error_handlers(flask_app: Flask) -> None:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
     """Register a JSON error handler that attaches a trace identifier."""
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -262,7 +1043,31 @@ def _register_error_handlers(flask_app: Flask) -> None:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
     def handle_unexpected_error(error: Exception):  # type: ignore[override]
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -270,7 +1075,31 @@ def _register_error_handlers(flask_app: Flask) -> None:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
         flask_app.logger.exception(
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -278,7 +1107,31 @@ def _register_error_handlers(flask_app: Flask) -> None:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
         )
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -286,7 +1139,31 @@ def _register_error_handlers(flask_app: Flask) -> None:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
         response.status_code = 500
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -302,11 +1179,71 @@ def _register_error_handlers(flask_app: Flask) -> None:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def _load_workflow_definition_by_type(workflow_type: str):
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
     file_path = WORKFLOW_DEFINITION_DIR / f"{workflow_type}.json"
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -322,7 +1259,55 @@ def _load_workflow_definition_by_type(workflow_type: str):
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def _open_modal(client, trigger_id: str, view: dict, workflow_type: str, logger) -> None:
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -330,7 +1315,31 @@ def _open_modal(client, trigger_id: str, view: dict, workflow_type: str, logger)
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
     try:
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -338,7 +1347,31 @@ def _open_modal(client, trigger_id: str, view: dict, workflow_type: str, logger)
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
         logger.info("Modal open call succeeded", extra={"workflow_type": workflow_type})
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -346,7 +1379,31 @@ def _open_modal(client, trigger_id: str, view: dict, workflow_type: str, logger)
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
         logger.error(
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -354,7 +1411,31 @@ def _open_modal(client, trigger_id: str, view: dict, workflow_type: str, logger)
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
             extra={
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -362,7 +1443,31 @@ def _open_modal(client, trigger_id: str, view: dict, workflow_type: str, logger)
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
                 "error": exc.response.get("error"),
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -370,7 +1475,31 @@ def _open_modal(client, trigger_id: str, view: dict, workflow_type: str, logger)
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
             },
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -386,111 +1515,100 @@ def _open_modal(client, trigger_id: str, view: dict, workflow_type: str, logger)
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def _handle_request_command(ack, command, client, logger):
-
-
-
-    request_id = str(uuid4())
-
-
-
-    logger = structlog.get_logger().bind(trace_id=request_id)
-
-
-
-    logger.info("slash_command_received", command=command.get("command"), workflow_type=command.get("text", "").strip())
-
-
-
+    trace_id = str(uuid4())
+    bind_contextvars(trace_id=trace_id)
+    log = structlog.get_logger().bind(trace_id=trace_id)
     try:
-
-
-
-        context = parse_slash_command(command.get("text") or "")
-
-
-
-    except ValueError as exc:
-
-
-
-        ack({"response_type": "ephemeral", "text": str(exc)})
-
-
-
-        return
-
-
-
-
-
-
-
-    try:
-
-
-
-        definition = load_workflow_or_raise(context.workflow_type)
-
-
-
-    except FileNotFoundError:
-
-
-
-        ack({"response_type": "ephemeral", "text": f"Workflow `{context.workflow_type}` is not configured."})
-
-
-
-        return
-
-
-
-    except ValidationError:
-
-
-
-        logger.exception("Invalid workflow definition", extra={"workflow_type": context.workflow_type})
-
-
-
-        ack({"response_type": "ephemeral", "text": "This workflow definition is invalid. Please contact an administrator."})
-
-
-
-        return
-
-
-
-
-
-
-
-    view = build_modal_view(definition)
-
-
-
-    trigger_id = command.get("trigger_id")
-
-
-
-    ack()
-
-
-
-    run_async(_open_modal, client, trigger_id, view, context.workflow_type, logger)
-
-
-
-
-
-
-
-
-
-
-
+        workflow_text = (command.get("text") or "").strip()
+        log.info(
+            "slash_command_received",
+            command=command.get("command"),
+            workflow_type=workflow_text,
+        )
+
+        try:
+            context = parse_slash_command(command.get("text") or "")
+        except ValueError as exc:
+            ack({"response_type": "ephemeral", "text": str(exc)})
+            return
+
+        try:
+            definition = load_workflow_or_raise(context.workflow_type)
+        except FileNotFoundError:
+            ack({"response_type": "ephemeral", "text": f"Workflow `{context.workflow_type}` is not configured."})
+            return
+        except ValidationError:
+            logger.exception(
+                "Invalid workflow definition",
+                extra={"workflow_type": context.workflow_type},
+            )
+            ack({"response_type": "ephemeral", "text": "This workflow definition is invalid. Please contact an administrator."})
+            return
+
+        view = build_modal_view(definition)
+        trigger_id = command.get("trigger_id")
+        ack()
+        run_async(
+            _open_modal,
+            client,
+            trigger_id,
+            view,
+            context.workflow_type,
+            logger,
+            trace_id=trace_id,
+        )
+    finally:
+        unbind_contextvars("trace_id")
 def _register_slash_handlers(bolt_app: SlackApp) -> None:
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -502,11 +1620,59 @@ def _register_slash_handlers(bolt_app: SlackApp) -> None:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     @bolt_app.command("/request")
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
     def handle_request(ack, command, client, logger):
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -522,304 +1688,135 @@ def _register_slash_handlers(bolt_app: SlackApp) -> None:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def _handle_view_submission(ack, body, client, logger):
-
     trace_id = str(uuid4())
+    bind_contextvars(trace_id=trace_id)
     log = structlog.get_logger().bind(trace_id=trace_id)
-
-    view = body.get("view", {})
-
-
-
-    metadata_raw = view.get("private_metadata", "{}")
-
-
-
     try:
-
-
-
-        metadata = json.loads(metadata_raw)
-
-
-
-    except json.JSONDecodeError:
-
-
-
-        ack({"response_action": "errors", "errors": {"general": "Invalid workflow metadata."}})
-
-
-
-        return
-
-
-
-
-
-
-
-    workflow_type = metadata.get("workflow_type")
-
-    log = log.bind(workflow_type=workflow_type)
-
-    if not workflow_type:
-
-
-
-        ack({"response_action": "errors", "errors": {"general": "Workflow metadata missing."}})
-
-
-
-        return
-
-
-
-
-
-
-
-    try:
-
-
-
-        definition = load_workflow_or_raise(workflow_type)
-
-
-
-    except FileNotFoundError:
-
-
-
-        ack({"response_action": "errors", "errors": {"general": "Workflow configuration not found."}})
-
-
-
-        return
-
-
-
-    except ValidationError:
-
-
-
-        logger.exception("Invalid workflow definition during submission", extra={"workflow_type": workflow_type})
-
-
-
-        ack({"response_action": "errors", "errors": {"general": "Workflow definition invalid."}})
-
-
-
-        return
-
-
-
-
-
-
-
-    state_payload = {"values": view.get("state", {}).get("values", {})}
-
-
-
-    try:
-
-
-
-        submission = parse_submission(state_payload, definition)
-
-
-
-    except ValueError as exc:
-
-
-
-        message = str(exc)
-
-
-
-        block = "general"
-
-
-
-        if ":" in message:
-
-
-
-            block, message = message.split(":", 1)
-
-
-
-            block = block.strip()
-
-
-
-            message = message.strip()
-
-
-
-        ack({"response_action": "errors", "errors": {block: message}})
-
-
-
-        return
-
-
-
-
-
-
-
-    user_id = body.get("user", {}).get("id", "unknown")
-
-
-
-    canonical_payload = canonical_json(submission)
-
-
-
-    request_key = compute_request_key(workflow_type, user_id, canonical_payload)
-
-
-
-    try:
-
-
-
-        request = save_request(
-
-
-
-            workflow_type=workflow_type,
-
-
-
-            created_by=user_id,
-
-
-
-            payload_json=canonical_payload,
-
-
-
-            request_key=request_key,
-
-
-
-        )
-
-
-
-        log.info(
-
-
-
-            "request_created",
-
-
-
-            request_id=request.id,
-
-
-
-            user_id=user_id,
-
-
-
-        )
-
-
-
-    except DuplicateRequestError:
-
-
-
-        ack(
-
-
-
-            {
-
-
-
-                "response_action": "errors",
-
-
-
-                "errors": {
-
-
-
-                    definition.fields[0].name if definition.fields else "general": "You already submitted this request."
-
-
-
-                },
-
-
-
-            }
-
-
-
-        )
-
-
-
-        return
-
-
-
-
-
-
-
-    ack({"response_action": "clear"})
-
-
-
-    run_async(
-
-
-
-        publish_request_message,
-
-
-
-        client=client,
-
-
-
-        definition=definition,
-
-
-
-        submission=submission,
-
-
-
-        request_id=request.id,
-
-
-
-        logger=logger,
-
-
-
-    )
-
-
-
-
-
-
-
-
-
-
-
+        view = body.get("view", {})
+        metadata_raw = view.get("private_metadata", "{}")
+        try:
+            metadata = json.loads(metadata_raw)
+        except json.JSONDecodeError:
+            ack({"response_action": "errors", "errors": {"general": "Invalid workflow metadata."}})
+            return
+
+        workflow_type = metadata.get("workflow_type")
+        log = log.bind(workflow_type=workflow_type)
+        if not workflow_type:
+            ack({"response_action": "errors", "errors": {"general": "Workflow metadata missing."}})
+            return
+
+        try:
+            definition = load_workflow_or_raise(workflow_type)
+        except FileNotFoundError:
+            ack({"response_action": "errors", "errors": {"general": "Workflow configuration not found."}})
+            return
+        except ValidationError:
+            logger.exception(
+                "Invalid workflow definition during submission",
+                extra={"workflow_type": workflow_type},
+            )
+            ack({"response_action": "errors", "errors": {"general": "Workflow definition invalid."}})
+            return
+
+        state_payload = {"values": view.get("state", {}).get("values", {})}
+        try:
+            submission = parse_submission(state_payload, definition)
+        except ValueError as exc:
+            message = str(exc)
+            block = "general"
+            if ":" in message:
+                block, message = message.split(":", 1)
+                block = block.strip()
+                message = message.strip()
+            ack({"response_action": "errors", "errors": {block: message}})
+            return
+
+        user_id = body.get("user", {}).get("id", "unknown")
+        canonical_payload = canonical_json(submission)
+        request_key = compute_request_key(workflow_type, user_id, canonical_payload)
+
+        try:
+            request = save_request(
+                workflow_type=workflow_type,
+                created_by=user_id,
+                payload_json=canonical_payload,
+                request_key=request_key,
+            )
+            log.info("request_created", request_id=request.id, user_id=user_id)
+        except DuplicateRequestError:
+            ack(
+                {
+                    "response_action": "errors",
+                    "errors": {
+                        definition.fields[0].name if definition.fields else "general": "You already submitted this request."
+                    },
+                }
+            )
+            return
+
+        ack({"response_action": "clear"})
+        run_async(
+            publish_request_message,
+            client=client,
+            definition=definition,
+            submission=submission,
+            request_id=request.id,
+            logger=logger,
+            trace_id=trace_id,
+        )
+    finally:
+        unbind_contextvars("trace_id")
 def _register_view_handlers(bolt_app: SlackApp) -> None:
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -827,7 +1824,31 @@ def _register_view_handlers(bolt_app: SlackApp) -> None:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
     def handle_submission(ack, body, client, logger):
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -843,7 +1864,55 @@ def _register_view_handlers(bolt_app: SlackApp) -> None:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def _extract_action_reason(body: dict) -> str | None:
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -851,7 +1920,31 @@ def _extract_action_reason(body: dict) -> str | None:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
     for block in values.values():
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -859,7 +1952,31 @@ def _extract_action_reason(body: dict) -> str | None:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
             continue
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -867,7 +1984,31 @@ def _extract_action_reason(body: dict) -> str | None:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
             if not isinstance(control, dict):
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -875,7 +2016,31 @@ def _extract_action_reason(body: dict) -> str | None:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
             value = control.get("value")
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -883,7 +2048,31 @@ def _extract_action_reason(body: dict) -> str | None:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
                 return value.strip()
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -891,7 +2080,31 @@ def _extract_action_reason(body: dict) -> str | None:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
             if isinstance(selected, dict):
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -899,11 +2112,47 @@ def _extract_action_reason(body: dict) -> str | None:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
                 if isinstance(selected_value, str) and selected_value.strip():
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
                     return selected_value.strip()
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -919,1065 +2168,323 @@ def _extract_action_reason(body: dict) -> str | None:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def _handle_approve_action(ack, body, client, logger):
-
-
-
     trace_id = str(uuid4())
-
-
-
+    bind_contextvars(trace_id=trace_id)
     log = structlog.get_logger().bind(trace_id=trace_id)
-
-
-
-
-
-
-
-    actions = body.get("actions") or []
-
-
-
     try:
-
-
-
-        action_payload = actions[0]
-
-
-
-    except IndexError:
-
-
-
-        ack({"response_type": "ephemeral", "text": "Unable to process this action payload."})
-
-
-
-        return
-
-
-
-
-
-
-
-    try:
-
-
-
-        context = parse_action_context(action_payload.get("value", ""))
-
-
-
-    except ValueError:
-
-
-
-        ack({"response_type": "ephemeral", "text": "This action payload is invalid. Please retry from Slack."})
-
-
-
-        log.warning("invalid_action_payload")
-
-
-
-        return
-
-
-
-
-
-
-
-    log = log.bind(request_id=context.request_id, workflow_type=context.workflow_type)
-
-
-
-
-
-
-
-    user_id = body.get("user", {}).get("id")
-
-
-
-    if not user_id:
-
-
-
-        ack({"response_type": "ephemeral", "text": "We could not identify the acting user."})
-
-
-
-        log.warning("missing_user_id")
-
-
-
-        return
-
-
-
-
-
-
-
-    settings = get_settings()
-
-
-
-    if not is_user_authorized(user_id, settings.approver_user_ids):
-
-
-
-        ack()
-
-
-
-        channel_id = body.get("channel", {}).get("id")
-
-
-
-        if channel_id:
-
-
-
-            client.chat_postEphemeral(
-
-
-
-                channel=channel_id,
-
-
-
-                user=user_id,
-
-
-
-                text="You are not authorized to approve this request.",
-
-
-
-            )
-
-
-
-        log.warning("unauthorized_attempt", user_id=user_id)
-
-
-
-        return
-
-
-
-
-
-
-
-    submission_payload = ""
-
-
-
-    channel_id = ""
-
-
-
-    ts = ""
-
-
-
-    with session_scope() as session:
-
-
-
-        request = session.get(Request, context.request_id)
-
-
-
-        if request is None:
-
-
-
-            ack({"response_type": "ephemeral", "text": "Request could not be found."})
-
-
-
-            log.warning("request_missing", user_id=user_id)
-
-
-
+        actions = body.get("actions") or []
+        try:
+            action_payload = actions[0]
+        except IndexError:
+            ack({"response_type": "ephemeral", "text": "Unable to process this action payload."})
             return
-
-
-
-
-
-
-
-        if request.type != context.workflow_type:
-
-
-
-            ack({"response_type": "ephemeral", "text": "Workflow type mismatch for this request."})
-
-
-
-            log.warning("workflow_type_mismatch", request_type=request.type, expected=context.workflow_type)
-
-
-
-            return
-
-
-
-
-
-
-
-        message = request.message
-
-
-
-        if message is None:
-
-
-
-            ack({"response_type": "ephemeral", "text": "Request message is not yet available."})
-
-
-
-            log.warning("message_reference_missing", user_id=user_id)
-
-
-
-            return
-
-
-
-
-
-
-
-        if request.created_by == user_id:
-
-
-
-            ack()
-
-
-
-            client.chat_postEphemeral(
-
-
-
-                channel=message.channel_id,
-
-
-
-                user=user_id,
-
-
-
-                text="You cannot approve your own request.",
-
-
-
-            )
-
-
-
-            log.info("self_approval_blocked", user_id=user_id)
-
-
-
-            return
-
-
-
-
-
-
-
-        submission_payload = request.payload_json
-
-
-
-        channel_id = message.channel_id
-
-
-
-        ts = message.ts
-
-
-
-        log = log.bind(message_channel=channel_id)
-
-
-
-
-
-
 
         try:
+            context = parse_action_context(action_payload.get("value", ""))
+        except ValueError:
+            ack({"response_type": "ephemeral", "text": "This action payload is invalid. Please retry from Slack."})
+            log.warning("invalid_action_payload")
+            return
 
+        log = log.bind(request_id=context.request_id, workflow_type=context.workflow_type)
 
+        user_id = body.get("user", {}).get("id")
+        if not user_id:
+            ack({"response_type": "ephemeral", "text": "We could not identify the acting user."})
+            log.warning("missing_user_id")
+            return
 
-            advance_request_status(
-
-
-
-                session,
-
-
-
-                request,
-
-
-
-                new_status="APPROVED",
-
-
-
-                decided_by=user_id,
-
-
-
-            )
-
-
-
-        except StatusTransitionError:
-
-
-
+        settings = get_settings()
+        if not is_user_authorized(user_id, settings.approver_user_ids):
             ack()
+            channel_id = body.get("channel", {}).get("id")
+            if channel_id:
+                client.chat_postEphemeral(
+                    channel=channel_id,
+                    user=user_id,
+                    text="You are not authorized to approve this request.",
+                )
+            log.warning("unauthorized_attempt", user_id=user_id)
+            return
 
+        submission_payload = ""
+        channel_id = ""
+        ts = ""
+        with session_scope() as session:
+            request = session.get(Request, context.request_id)
+            if request is None:
+                ack({"response_type": "ephemeral", "text": "Request could not be found."})
+                log.warning("request_missing", user_id=user_id)
+                return
 
+            if request.type != context.workflow_type:
+                ack({"response_type": "ephemeral", "text": "Workflow type mismatch for this request."})
+                log.warning("workflow_type_mismatch", request_type=request.type, expected=context.workflow_type)
+                return
 
-            client.chat_postEphemeral(
+            message = request.message
+            if message is None:
+                ack({"response_type": "ephemeral", "text": "Request message is not yet available."})
+                log.warning("message_reference_missing", user_id=user_id)
+                return
 
+            if request.created_by == user_id:
+                ack()
+                client.chat_postEphemeral(
+                    channel=message.channel_id,
+                    user=user_id,
+                    text="You cannot approve your own request.",
+                )
+                log.info("self_approval_blocked", user_id=user_id)
+                return
 
+            submission_payload = request.payload_json
+            channel_id = message.channel_id
+            ts = message.ts
+            log = log.bind(message_channel=channel_id)
 
-                channel=message.channel_id,
+            try:
+                advance_request_status(
+                    session,
+                    request,
+                    new_status="APPROVED",
+                    decided_by=user_id,
+                )
+            except StatusTransitionError:
+                ack()
+                client.chat_postEphemeral(
+                    channel=message.channel_id,
+                    user=user_id,
+                    text="This request has already been decided.",
+                )
+                log.info("decision_already_recorded", user_id=user_id, decision=request.status)
+                return
+            except OptimisticLockError:
+                ack({"response_type": "ephemeral", "text": "Request was updated concurrently. Please try again."})
+                log.warning("optimistic_lock_failed", user_id=user_id)
+                return
 
+        ack({"response_type": "ephemeral", "text": "Request approved."})
+        log.info("approved", decided_by=user_id)
 
-
-                user=user_id,
-
-
-
-                text="This request has already been decided.",
-
-
-
+        try:
+            definition = load_workflow_or_raise(context.workflow_type)
+        except (FileNotFoundError, ValidationError):
+            logger.exception(
+                "Unable to load workflow definition during approval",
+                extra={"workflow_type": context.workflow_type},
             )
-
-
-
-            log.info("decision_already_recorded", user_id=user_id, decision=request.status)
-
-
-
             return
 
-
-
-        except OptimisticLockError:
-
-
-
-            ack({"response_type": "ephemeral", "text": "Request was updated concurrently. Please try again."})
-
-
-
-            log.warning("optimistic_lock_failed", user_id=user_id)
-
-
-
-            return
-
-
-
-
-
-
-
-    ack({"response_type": "ephemeral", "text": "Request approved."})
-
-
-
-    log.info("request_decision", decision="APPROVED", decided_by=user_id)
-
-
-
-
-
-
-
-    try:
-
-
-
-        definition = load_workflow_or_raise(context.workflow_type)
-
-
-
-    except (FileNotFoundError, ValidationError):
-
-
-
-        logger.exception(
-
-
-
-            "Unable to load workflow definition during approval",
-
-
-
-            extra={"workflow_type": context.workflow_type},
-
-
-
-        )
-
-
-
-        return
-
-
-
-
-
-
-
-    try:
-
-
-
-        submission = json.loads(submission_payload) if submission_payload else {}
-
-
-
-    except json.JSONDecodeError:
-
-
-
-        logger.exception(
-
-
-
-            "Stored payload_json is invalid JSON",
-
-
-
-            extra={"request_id": context.request_id},
-
-
-
-        )
-
-
-
-        submission = {}
-
-
-
-
-
-
-
-    run_async(
-
-
-
-        update_request_message,
-
-
-
-        client=client,
-
-
-
-        definition=definition,
-
-
-
-        submission=submission,
-
-
-
-        request_id=context.request_id,
-
-
-
-        decision="APPROVED",
-
-
-
-        decided_by=user_id,
-
-
-
-        channel_id=channel_id,
-
-
-
-        ts=ts,
-
-
-
-        logger=logger,
-
-
-
-    )
-
-
-
-
-
-
-
-
-
-
-
-
-
+        try:
+            submission = json.loads(submission_payload) if submission_payload else {}
+        except json.JSONDecodeError:
+            logger.exception(
+                "Stored payload_json is invalid JSON",
+                extra={"request_id": context.request_id},
+            )
+            submission = {}
+
+        run_async(
+        update_request_message,
+        client=client,
+        definition=definition,
+        submission=submission,
+        request_id=context.request_id,
+        decision="APPROVED",
+        decided_by=user_id,
+        channel_id=channel_id,
+        ts=ts,
+        logger=logger,
+        trace_id=trace_id,
+    )
+    finally:
+        unbind_contextvars("trace_id")
 def _handle_reject_action(ack, body, client, logger):
-
-
-
     trace_id = str(uuid4())
-
-
-
+    bind_contextvars(trace_id=trace_id)
     log = structlog.get_logger().bind(trace_id=trace_id)
-
-
-
-
-
-
-
-    actions = body.get("actions") or []
-
-
-
     try:
-
-
-
-        action_payload = actions[0]
-
-
-
-    except IndexError:
-
-
-
-        ack({"response_type": "ephemeral", "text": "Unable to process this action payload."})
-
-
-
-        return
-
-
-
-
-
-
-
-    try:
-
-
-
-        context = parse_action_context(action_payload.get("value", ""))
-
-
-
-    except ValueError:
-
-
-
-        ack({"response_type": "ephemeral", "text": "This action payload is invalid. Please retry from Slack."})
-
-
-
-        log.warning("invalid_action_payload")
-
-
-
-        return
-
-
-
-
-
-
-
-    log = log.bind(request_id=context.request_id, workflow_type=context.workflow_type)
-
-
-
-
-
-
-
-    user_id = body.get("user", {}).get("id")
-
-
-
-    if not user_id:
-
-
-
-        ack({"response_type": "ephemeral", "text": "We could not identify the acting user."})
-
-
-
-        log.warning("missing_user_id")
-
-
-
-        return
-
-
-
-
-
-
-
-    settings = get_settings()
-
-
-
-    if not is_user_authorized(user_id, settings.approver_user_ids):
-
-
-
-        ack()
-
-
-
-        channel_id = body.get("channel", {}).get("id")
-
-
-
-        if channel_id:
-
-
-
-            client.chat_postEphemeral(
-
-
-
-                channel=channel_id,
-
-
-
-                user=user_id,
-
-
-
-                text="You are not authorized to reject this request.",
-
-
-
-            )
-
-
-
-        log.warning("unauthorized_attempt", user_id=user_id)
-
-
-
-        return
-
-
-
-
-
-
-
-    submission_payload = ""
-
-
-
-    channel_id = ""
-
-
-
-    ts = ""
-
-
-
-    reason = _extract_action_reason(body)
-
-
-
-    with session_scope() as session:
-
-
-
-        request = session.get(Request, context.request_id)
-
-
-
-        if request is None:
-
-
-
-            ack({"response_type": "ephemeral", "text": "Request could not be found."})
-
-
-
-            log.warning("request_missing", user_id=user_id)
-
-
-
+        actions = body.get("actions") or []
+        try:
+            action_payload = actions[0]
+        except IndexError:
+            ack({"response_type": "ephemeral", "text": "Unable to process this action payload."})
             return
-
-
-
-
-
-
-
-        if request.type != context.workflow_type:
-
-
-
-            ack({"response_type": "ephemeral", "text": "Workflow type mismatch for this request."})
-
-
-
-            log.warning("workflow_type_mismatch", request_type=request.type, expected=context.workflow_type)
-
-
-
-            return
-
-
-
-
-
-
-
-        message = request.message
-
-
-
-        if message is None:
-
-
-
-            ack({"response_type": "ephemeral", "text": "Request message is not yet available."})
-
-
-
-            log.warning("message_reference_missing", user_id=user_id)
-
-
-
-            return
-
-
-
-
-
-
-
-        if request.created_by == user_id:
-
-
-
-            ack()
-
-
-
-            client.chat_postEphemeral(
-
-
-
-                channel=message.channel_id,
-
-
-
-                user=user_id,
-
-
-
-                text="You cannot reject your own request.",
-
-
-
-            )
-
-
-
-            log.info("self_reject_blocked", user_id=user_id)
-
-
-
-            return
-
-
-
-
-
-
-
-        submission_payload = request.payload_json
-
-
-
-        channel_id = message.channel_id
-
-
-
-        ts = message.ts
-
-
-
-        log = log.bind(message_channel=channel_id)
-
-
-
-
-
-
 
         try:
+            context = parse_action_context(action_payload.get("value", ""))
+        except ValueError:
+            ack({"response_type": "ephemeral", "text": "This action payload is invalid. Please retry from Slack."})
+            log.warning("invalid_action_payload")
+            return
 
+        log = log.bind(request_id=context.request_id, workflow_type=context.workflow_type)
 
+        user_id = body.get("user", {}).get("id")
+        if not user_id:
+            ack({"response_type": "ephemeral", "text": "We could not identify the acting user."})
+            log.warning("missing_user_id")
+            return
 
-            advance_request_status(
-
-
-
-                session,
-
-
-
-                request,
-
-
-
-                new_status="REJECTED",
-
-
-
-                decided_by=user_id,
-
-
-
-            )
-
-
-
-        except StatusTransitionError:
-
-
-
+        settings = get_settings()
+        if not is_user_authorized(user_id, settings.approver_user_ids):
             ack()
+            channel_id = body.get("channel", {}).get("id")
+            if channel_id:
+                client.chat_postEphemeral(
+                    channel=channel_id,
+                    user=user_id,
+                    text="You are not authorized to reject this request.",
+                )
+            log.warning("unauthorized_attempt", user_id=user_id)
+            return
 
+        submission_payload = ""
+        channel_id = ""
+        ts = ""
+        reason = _extract_action_reason(body)
+        with session_scope() as session:
+            request = session.get(Request, context.request_id)
+            if request is None:
+                ack({"response_type": "ephemeral", "text": "Request could not be found."})
+                log.warning("request_missing", user_id=user_id)
+                return
 
+            if request.type != context.workflow_type:
+                ack({"response_type": "ephemeral", "text": "Workflow type mismatch for this request."})
+                log.warning("workflow_type_mismatch", request_type=request.type, expected=context.workflow_type)
+                return
 
-            client.chat_postEphemeral(
+            message = request.message
+            if message is None:
+                ack({"response_type": "ephemeral", "text": "Request message is not yet available."})
+                log.warning("message_reference_missing", user_id=user_id)
+                return
 
+            if request.created_by == user_id:
+                ack()
+                client.chat_postEphemeral(
+                    channel=message.channel_id,
+                    user=user_id,
+                    text="You cannot reject your own request.",
+                )
+                log.info("self_reject_blocked", user_id=user_id)
+                return
 
+            submission_payload = request.payload_json
+            channel_id = message.channel_id
+            ts = message.ts
+            log = log.bind(message_channel=channel_id)
 
-                channel=message.channel_id,
+            try:
+                advance_request_status(
+                    session,
+                    request,
+                    new_status="REJECTED",
+                    decided_by=user_id,
+                )
+            except StatusTransitionError:
+                ack()
+                client.chat_postEphemeral(
+                    channel=message.channel_id,
+                    user=user_id,
+                    text="This request has already been decided.",
+                )
+                log.info("decision_already_recorded", user_id=user_id, decision=request.status)
+                return
+            except OptimisticLockError:
+                ack({"response_type": "ephemeral", "text": "Request was updated concurrently. Please try again."})
+                log.warning("optimistic_lock_failed", user_id=user_id)
+                return
 
+        ack({"response_type": "ephemeral", "text": "Request rejected."})
+        log.info("rejected", decided_by=user_id, reason=reason or None)
 
-
-                user=user_id,
-
-
-
-                text="This request has already been decided.",
-
-
-
+        try:
+            definition = load_workflow_or_raise(context.workflow_type)
+        except (FileNotFoundError, ValidationError):
+            logger.exception(
+                "Unable to load workflow definition during rejection",
+                extra={"workflow_type": context.workflow_type},
             )
-
-
-
-            log.info("decision_already_recorded", user_id=user_id, decision=request.status)
-
-
-
             return
 
-
-
-        except OptimisticLockError:
-
-
-
-            ack({"response_type": "ephemeral", "text": "Request was updated concurrently. Please try again."})
-
-
-
-            log.warning("optimistic_lock_failed", user_id=user_id)
-
-
-
-            return
-
-
-
-
-
-
-
-    ack({"response_type": "ephemeral", "text": "Request rejected."})
-
-
-
-    log.info("request_decision", decision="REJECTED", decided_by=user_id)
-
-
-
-
-
-
-
-    try:
-
-
-
-        definition = load_workflow_or_raise(context.workflow_type)
-
-
-
-    except (FileNotFoundError, ValidationError):
-
-
-
-        logger.exception(
-
-
-
-            "Unable to load workflow definition during rejection",
-
-
-
-            extra={"workflow_type": context.workflow_type},
-
-
-
-        )
-
-
-
-        return
-
-
-
-
-
-
-
-    try:
-
-
-
-        submission = json.loads(submission_payload) if submission_payload else {}
-
-
-
-    except json.JSONDecodeError:
-
-
-
-        logger.exception(
-
-
-
-            "Stored payload_json is invalid JSON",
-
-
-
-            extra={"request_id": context.request_id},
-
-
-
-        )
-
-
-
-        submission = {}
-
-
-
-
-
-
-
-    run_async(
-
-
-
-        update_request_message,
-
-
-
-        client=client,
-
-
-
-        definition=definition,
-
-
-
-        submission=submission,
-
-
-
-        request_id=context.request_id,
-
-
-
-        decision="REJECTED",
-
-
-
-        decided_by=user_id,
-
-
-
-        channel_id=channel_id,
-
-
-
-        ts=ts,
-
-
-
-        logger=logger,
-
-
-
-        reason=reason,
-
-
-
-    )
-
-
-
-
-
-
-
-
-
-
-
+        try:
+            submission = json.loads(submission_payload) if submission_payload else {}
+        except json.JSONDecodeError:
+            logger.exception(
+                "Stored payload_json is invalid JSON",
+                extra={"request_id": context.request_id},
+            )
+            submission = {}
+
+        run_async(
+        update_request_message,
+        client=client,
+        definition=definition,
+        submission=submission,
+        request_id=context.request_id,
+        decision="REJECTED",
+        decided_by=user_id,
+        channel_id=channel_id,
+        ts=ts,
+        logger=logger,
+        reason=reason,
+        trace_id=trace_id,
+    )
+    finally:
+        unbind_contextvars("trace_id")
 def _register_action_handlers(bolt_app: SlackApp) -> None:
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1985,7 +2492,31 @@ def _register_action_handlers(bolt_app: SlackApp) -> None:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
     def handle_approve(ack, body, client, logger):
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1997,7 +2528,43 @@ def _register_action_handlers(bolt_app: SlackApp) -> None:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     @bolt_app.action(REJECT_ACTION_ID)
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2005,7 +2572,55 @@ def _register_action_handlers(bolt_app: SlackApp) -> None:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
         _handle_reject_action(ack=ack, body=body, client=client, logger=logger)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2029,7 +2644,55 @@ _LOGGING_CONFIGURED = False
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def _load_version() -> str:
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2037,11 +2700,47 @@ def _load_version() -> str:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
     if version_file.exists():
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
         return version_file.read_text(encoding="utf-8").strip()
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2057,7 +2756,55 @@ def _load_version() -> str:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def create_app() -> Flask:
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2069,7 +2816,43 @@ def create_app() -> Flask:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     global _LOGGING_CONFIGURED
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2077,7 +2860,31 @@ def create_app() -> Flask:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
         configure_logging()
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2089,7 +2896,43 @@ def create_app() -> Flask:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     settings = get_settings()
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2097,7 +2940,31 @@ def create_app() -> Flask:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
     handler = SlackRequestHandler(bolt_app)
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2105,7 +2972,31 @@ def create_app() -> Flask:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
     flask_app.config["APP_VERSION"] = _load_version()
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2117,7 +3008,43 @@ def create_app() -> Flask:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     _register_error_handlers(flask_app)
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2125,7 +3052,31 @@ def create_app() -> Flask:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
     _register_view_handlers(bolt_app)
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2137,7 +3088,43 @@ def create_app() -> Flask:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     @flask_app.route("/slack/events", methods=["POST"])
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2145,7 +3132,31 @@ def create_app() -> Flask:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
         raw_body = request.get_data(as_text=True)
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2153,7 +3164,31 @@ def create_app() -> Flask:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
         signature = request.headers.get(SLACK_SIGNATURE_HEADER, "")
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2161,7 +3196,31 @@ def create_app() -> Flask:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
             signing_secret=settings.signing_secret,
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2169,7 +3228,31 @@ def create_app() -> Flask:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
             body=raw_body,
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2177,7 +3260,31 @@ def create_app() -> Flask:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
         ):
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2185,7 +3292,31 @@ def create_app() -> Flask:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
             response.status_code = 401
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2197,11 +3328,60 @@ def create_app() -> Flask:
 
 
 
-        @copy_current_request_context
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        trace_id = str(uuid4())
+        @copy_current_request_context
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
         def process_request():
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2213,7 +3393,43 @@ def create_app() -> Flask:
 
 
 
-        run_async(process_request)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        run_async(process_request, trace_id=trace_id)
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2225,7 +3441,43 @@ def create_app() -> Flask:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     @flask_app.route("/healthz", methods=["GET"])
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2233,7 +3485,31 @@ def create_app() -> Flask:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
         health: dict[str, object] = {"ok": True}
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2245,7 +3521,43 @@ def create_app() -> Flask:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         try:
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2253,7 +3565,31 @@ def create_app() -> Flask:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
             health["config"] = "valid"
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2261,7 +3597,31 @@ def create_app() -> Flask:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
             health["config"] = "invalid"
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2269,7 +3629,43 @@ def create_app() -> Flask:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
             health["ok"] = False
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2281,7 +3677,31 @@ def create_app() -> Flask:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
             with session_scope() as session:
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2289,7 +3709,31 @@ def create_app() -> Flask:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
             health["db"] = "up"
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2297,7 +3741,31 @@ def create_app() -> Flask:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
             health["db"] = "down"
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2305,7 +3773,43 @@ def create_app() -> Flask:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
             health["ok"] = False
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2317,7 +3821,43 @@ def create_app() -> Flask:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
         return jsonify(health), status
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2337,7 +3877,55 @@ def create_app() -> Flask:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 if __name__ == "__main__":  # pragma: no cover - manual execution helper
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2345,7 +3933,31 @@ if __name__ == "__main__":  # pragma: no cover - manual execution helper
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
     application.run(host="0.0.0.0", port=3000, debug=True)
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from slack_sdk.errors import SlackApiError
+import structlog
 
 from slack_workflow_engine.slack_client import SlackClient
 
@@ -24,6 +25,11 @@ def publish_request_message(
     """Post the workflow request message to Slack and store its reference."""
 
     slack_client = SlackClient(client=client)
+    log = structlog.get_logger().bind(
+        request_id=request_id,
+        workflow_type=definition.type,
+        channel=definition.notify_channel,
+    )
     message_payload = build_request_message(
         definition=definition,
         submission=submission,
@@ -37,6 +43,14 @@ def publish_request_message(
             blocks=message_payload["blocks"],
         )
     except SlackApiError as exc:  # pragma: no cover - depends on Slack API behaviour
+        status_code = getattr(exc.response, "status_code", None) if getattr(exc, "response", None) else None
+        error_code = exc.response.get("error") if getattr(exc, "response", None) else str(exc)
+        log.error(
+            "webhook_failed",
+            operation="publish_request_message",
+            error=error_code,
+            status_code=status_code,
+        )
         logger.error(
             "Failed to publish workflow request message",
             extra={
@@ -86,6 +100,11 @@ def update_request_message(
     """Update an existing Slack message to reflect the latest decision."""
 
     slack_client = SlackClient(client=client)
+    log = structlog.get_logger().bind(
+        request_id=request_id,
+        workflow_type=definition.type,
+        channel=channel_id,
+    )
     payload = build_request_decision_update(
         definition=definition,
         submission=submission,
@@ -103,6 +122,14 @@ def update_request_message(
             blocks=payload["blocks"],
         )
     except SlackApiError as exc:  # pragma: no cover - depends on Slack API behaviour
+        status_code = getattr(exc.response, "status_code", None) if getattr(exc, "response", None) else None
+        error_code = exc.response.get("error") if getattr(exc, "response", None) else str(exc)
+        log.error(
+            "webhook_failed",
+            operation="update_request_message",
+            error=error_code,
+            status_code=status_code,
+        )
         logger.error(
             "Failed to update workflow request message",
             extra={

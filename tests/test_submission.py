@@ -1,10 +1,14 @@
 """Tests for view submission handling."""
 
 import json
+import logging
 from pathlib import Path
 import sys
 
 import pytest
+import structlog
+from structlog.contextvars import clear_contextvars
+from structlog.testing import capture_logs
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -77,6 +81,13 @@ class DummySlackWebClient:
         }
 
 
+def run_async_sync(func, /, *args, **kwargs):
+    """Execute asynchronous workloads immediately for tests while dropping trace metadata."""
+
+    kwargs.pop("trace_id", None)
+    return func(*args, **kwargs)
+
+
 def test_handle_view_submission_persists_request(logger, monkeypatch):
     ack_calls = []
 
@@ -87,7 +98,8 @@ def test_handle_view_submission_persists_request(logger, monkeypatch):
     scheduled = []
 
     def fake_run_async(func, /, *args, **kwargs):
-        scheduled.append((func, args, kwargs))
+        trace_id = kwargs.pop("trace_id", None)
+        scheduled.append((func, args, kwargs, trace_id))
         func(*args, **kwargs)
         return None
 
@@ -115,10 +127,11 @@ def test_handle_view_submission_persists_request(logger, monkeypatch):
 
     assert ack_calls == [{"response_action": "clear"}]
     assert scheduled
-    func, args, kwargs = scheduled[0]
+    func, args, kwargs, trace_id = scheduled[0]
     assert func is app_module.publish_request_message
     assert "request_id" in kwargs
     assert kwargs["definition"].type == "refund"
+    assert trace_id
 
     engine = get_engine()
     with engine.begin() as connection:
@@ -181,7 +194,7 @@ def test_handle_view_submission_duplicate_request(logger, monkeypatch):
         ack_calls.append(payload)
 
     slack_client = DummySlackWebClient()
-    monkeypatch.setattr(app_module, "run_async", lambda func, /, *args, **kwargs: func(*args, **kwargs))
+    monkeypatch.setattr(app_module, "run_async", run_async_sync)
 
     body = {
         "user": {"id": "U123"},
@@ -223,3 +236,46 @@ def test_handle_view_submission_duplicate_request(logger, monkeypatch):
         assert len(rows) == 1
         messages = connection.execute(Message.__table__.select()).fetchall()
         assert not messages
+
+
+def test_request_created_log_contains_trace_id_without_payload(logger, monkeypatch):
+    ack_calls = []
+
+    def ack(payload=None):
+        ack_calls.append(payload)
+
+    clear_contextvars()
+    monkeypatch.setattr(app_module, "run_async", lambda func, /, *args, **kwargs: None)
+
+    body = {
+        "user": {"id": "U123"},
+        "view": {
+            "private_metadata": json.dumps({"workflow_type": "refund"}),
+            "state": {
+                "values": {
+                    "order_id": {"order_id": {"value": "12345"}},
+                    "amount": {"amount": {"value": "42.5"}},
+                }
+            },
+        },
+    }
+
+    with capture_logs(processors=[structlog.contextvars.merge_contextvars]) as logs:
+        app_module._handle_view_submission(
+            ack=ack,
+            body=body,
+            client=object(),
+            logger=logger,
+        )
+
+    clear_contextvars()
+
+    events = [entry for entry in logs if entry.get("event") == "request_created"]
+    assert events, "request_created log line was not emitted"
+
+    event = events[0]
+    assert event.get("trace_id"), "trace_id missing from structured log"
+    assert "request_id" in event, "request_id missing from structured log"
+    assert "payload" not in event, "payload should not be logged"
+    assert "payload_json" not in event, "payload_json should not be logged"
+    assert ack_calls == [{"response_action": "clear"}]

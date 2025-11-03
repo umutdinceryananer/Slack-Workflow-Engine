@@ -88,6 +88,11 @@ Central, configuration-driven Slack workflow bot. A single Slack app handles mul
    pytest -q
    ```
 
+### Structured logging & trace IDs
+- Logs are emitted as JSON via structlog; each slash command, modal submission, and button action gets a unique `trace_id`.
+- The `trace_id` flows into background workers so `request_created`, `approved`, `rejected`, `unauthorized_attempt`, and `webhook_failed` entries share the same identifier.
+- Slack API failures are reported as `webhook_failed` with the channel, status code, and Slack error string so you can troubleshoot without exposing payload data.
+
 ### Resetting your local database
 - If you want to start from a clean slate, load your `.env` values and run:
   ```bash
