@@ -287,7 +287,12 @@ def _handle_approve_action(ack, body, client, logger):
                 decided_by=user_id,
             )
         except StatusTransitionError:
-            ack({"response_type": "ephemeral", "text": "This request has already been decided."})
+            ack()
+            client.chat_postEphemeral(
+                channel=message.channel_id,
+                user=user_id,
+                text="This request has already been decided.",
+            )
             return
         except OptimisticLockError:
             ack({"response_type": "ephemeral", "text": "Request was updated concurrently. Please try again."})
@@ -398,7 +403,12 @@ def _handle_reject_action(ack, body, client, logger):
                 decided_by=user_id,
             )
         except StatusTransitionError:
-            ack({"response_type": "ephemeral", "text": "This request has already been decided."})
+            ack()
+            client.chat_postEphemeral(
+                channel=message.channel_id,
+                user=user_id,
+                text="This request has already been decided.",
+            )
             return
         except OptimisticLockError:
             ack({"response_type": "ephemeral", "text": "Request was updated concurrently. Please try again."})

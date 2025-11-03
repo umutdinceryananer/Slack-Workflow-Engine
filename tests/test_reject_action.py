@@ -203,3 +203,39 @@ def test_handle_reject_action_self_guard(monkeypatch, logger):
     with factory() as session:
         refreshed = session.get(Request, request.id)
         assert refreshed.status == "PENDING"
+
+
+def test_handle_reject_action_duplicate_click(monkeypatch, logger):
+    request = _create_request_with_message()
+
+    ack_payloads = []
+
+    def ack(payload=None):
+        ack_payloads.append(payload)
+
+    slack_client = DummySlackWebClient()
+    monkeypatch.setattr(app_module, "run_async", lambda func, /, *args, **kwargs: func(*args, **kwargs))
+
+    body = {
+        "user": {"id": "U2"},
+        "channel": {"id": "CREFUND"},
+        "actions": [
+            {
+                "value": json.dumps({"request_id": request.id, "workflow_type": "refund"}),
+            }
+        ],
+        "state": {"values": {}},
+    }
+
+    app_module._handle_reject_action(ack=ack, body=body, client=slack_client, logger=logger)
+    app_module._handle_reject_action(ack=ack, body=body, client=slack_client, logger=logger)
+
+    assert ack_payloads[0] == {"response_type": "ephemeral", "text": "Request rejected."}
+    assert ack_payloads[1] is None
+    assert len(slack_client.update_calls) == 1
+    assert slack_client.update_calls[0]["channel"] == "CREFUND"
+    assert slack_client.ephemeral_calls[-1] == {
+        "channel": "CREFUND",
+        "user": "U2",
+        "text": "This request has already been decided.",
+    }
