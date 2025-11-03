@@ -6,7 +6,7 @@ Central, configuration-driven Slack workflow bot. A single Slack app handles mul
 - Slash command `/request refund` opens a modal based on config
 - Stores requests in a database; posts a channel message with Approve/Reject
 - Updates status on button clicks with basic authorisation
-- Structured JSON logging; `/healthz` endpoint
+- Structured JSON logging with end-to-end trace IDs; `/healthz` endpoint
 
 **Tech Stack**
 - Python 3.11+, Slack Bolt for Python, Flask, SQLAlchemy, Pydantic, structlog
@@ -89,9 +89,11 @@ Central, configuration-driven Slack workflow bot. A single Slack app handles mul
    ```
 
 ### Structured logging & trace IDs
-- Logs are emitted as JSON via structlog; each slash command, modal submission, and button action gets a unique `trace_id`.
-- The `trace_id` flows into background workers so `request_created`, `approved`, `rejected`, `unauthorized_attempt`, and `webhook_failed` entries share the same identifier.
-- Slack API failures are reported as `webhook_failed` with the channel, status code, and Slack error string so you can troubleshoot without exposing payload data.
+- Logs are emitted as JSON via structlog; each slash command, modal submission, button action, and webhook handler binds a unique `trace_id`.
+- Background tasks inherit the same structlog context, so `request_created`, `approved`, `rejected`, `unauthorized_attempt`, and `webhook_failed` events can be stitched together with the originating request.
+- Sensitive payload bodies are never logged; only correlation metadata and high-level status fields are captured.
+- Automated coverage (`tests/test_background.py`, `tests/test_submission.py`, `tests/test_approve_action.py`, `tests/test_reject_action.py`) asserts that `trace_id` survives async boundaries and that no payload data leaks into structured logs.
+- Slack API failures are reported as `webhook_failed` with the channel, status code, and Slack error string so you can troubleshoot without exposing payload data. Tail with `pytest -k background --log-cli-level=INFO` to validate behaviour locally.
 
 ### Resetting your local database
 - If you want to start from a clean slate, load your `.env` values and run:

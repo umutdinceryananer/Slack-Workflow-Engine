@@ -201,6 +201,9 @@ This list translates the Part-1 scope and lock decisions into actionable issues.
   - Each log includes `trace_id` and, where applicable, `request_id`; secrets/PII are redacted.
 - Tests:
   - Log capture asserts presence of fields and absence of secrets; correlation `trace_id` continuity across async boundary.
+- Implementation Notes:
+  - `slack_workflow_engine.background.run_async` now copies contextvars and seeds `trace_id` into background jobs invoked from slash commands, modal submissions, and action handlers.
+  - README logging section documents correlation flow, sensitive-field redaction, and troubleshooting, with pointers to the regression tests that guard behaviour.
 
   Cross-References:
   - Extended by Part-2 #18 "Prometheus Metrics Endpoint (Phase-2)" (adds metrics beyond logs).
