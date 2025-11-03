@@ -14,6 +14,9 @@ import app as app_module  # noqa: E402
 from slack_workflow_engine import config  # noqa: E402
 from slack_workflow_engine.db import get_engine, get_session_factory  # noqa: E402
 from slack_workflow_engine.models import Base, Request, Message  # noqa: E402
+from slack_workflow_engine.workflows.commands import load_workflow_or_raise  # noqa: E402
+from slack_workflow_engine.workflows.requests import canonical_json, compute_request_key, parse_submission  # noqa: E402
+from slack_workflow_engine.workflows.storage import save_request  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -169,3 +172,54 @@ def test_handle_view_submission_invalid_metadata(logger):
     app_module._handle_view_submission(ack=ack, body=body, client=object(), logger=logger)
 
     assert ack_payloads[0]["errors"]["general"] == "Invalid workflow metadata."
+
+
+def test_handle_view_submission_duplicate_request(logger, monkeypatch):
+    ack_calls = []
+
+    def ack(payload=None):
+        ack_calls.append(payload)
+
+    slack_client = DummySlackWebClient()
+    monkeypatch.setattr(app_module, "run_async", lambda func, /, *args, **kwargs: func(*args, **kwargs))
+
+    body = {
+        "user": {"id": "U123"},
+        "view": {
+            "private_metadata": json.dumps({"workflow_type": "refund"}),
+            "state": {
+                "values": {
+                    "order_id": {"order_id": {"value": "12345"}},
+                    "amount": {"amount": {"value": "42.5"}},
+                }
+            },
+        },
+    }
+
+    definition = load_workflow_or_raise("refund")
+    state_payload = {"values": body["view"]["state"]["values"]}
+    parsed_submission = parse_submission(state_payload, definition)
+    payload = canonical_json(parsed_submission)
+    request_key = compute_request_key("refund", "U123", payload)
+    save_request(
+        workflow_type="refund",
+        created_by="U123",
+        payload_json=payload,
+        request_key=request_key,
+    )
+    engine = get_engine()
+    with engine.begin() as connection:
+        stored = connection.execute(Request.__table__.select()).fetchone()
+        assert stored.request_key == request_key
+
+    app_module._handle_view_submission(ack=ack, body=body, client=slack_client, logger=logger)
+
+    assert ack_calls == [
+        {"response_action": "errors", "errors": {"order_id": "You already submitted this request."}}
+    ]
+
+    with engine.begin() as connection:
+        rows = connection.execute(Request.__table__.select()).fetchall()
+        assert len(rows) == 1
+        messages = connection.execute(Message.__table__.select()).fetchall()
+        assert not messages

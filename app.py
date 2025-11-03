@@ -19,6 +19,7 @@ from slack_workflow_engine.models import (
     Request,
     StatusTransitionError,
     OptimisticLockError,
+    DuplicateRequestError,
     advance_request_status,
 )
 from slack_workflow_engine.security import (
@@ -162,12 +163,23 @@ def _handle_view_submission(ack, body, client, logger):
     user_id = body.get("user", {}).get("id", "unknown")
     canonical_payload = canonical_json(submission)
     request_key = compute_request_key(workflow_type, user_id, canonical_payload)
-    request = save_request(
-        workflow_type=workflow_type,
-        created_by=user_id,
-        payload_json=canonical_payload,
-        request_key=request_key,
-    )
+    try:
+        request = save_request(
+            workflow_type=workflow_type,
+            created_by=user_id,
+            payload_json=canonical_payload,
+            request_key=request_key,
+        )
+    except DuplicateRequestError:
+        ack(
+            {
+                "response_action": "errors",
+                "errors": {
+                    definition.fields[0].name if definition.fields else "general": "You already submitted this request."
+                },
+            }
+        )
+        return
 
     ack({"response_action": "clear"})
     run_async(

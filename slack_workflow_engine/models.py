@@ -57,6 +57,10 @@ class OptimisticLockError(Exception):
     """Raised when a concurrent update is detected."""
 
 
+class DuplicateRequestError(Exception):
+    """Raised when a duplicate request submission is detected."""
+
+
 _ALLOWED_TRANSITIONS = {
     "PENDING": {"APPROVED", "REJECTED"},
     "APPROVED": set(),
