@@ -82,3 +82,21 @@ def test_build_request_decision_update_replaces_buttons(workflow_definition):
     context_text = blocks[-1]["elements"][0]["text"]
     assert "Approved" in context_text
     assert "U777" in context_text
+    assert all(block.get("type") != "actions" for block in blocks)
+
+
+def test_build_request_decision_update_includes_reason(workflow_definition):
+    submission = {"order_id": "D-100"}
+
+    updated = build_request_decision_update(
+        definition=workflow_definition,
+        submission=submission,
+        request_id=5,
+        decision="REJECTED",
+        decided_by="U9",
+        reason="Missing receipt",
+    )
+
+    reason_block = updated["blocks"][-1]
+    assert reason_block["type"] == "section"
+    assert "Missing receipt" in reason_block["text"]["text"]

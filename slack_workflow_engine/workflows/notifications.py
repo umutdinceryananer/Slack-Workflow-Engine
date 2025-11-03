@@ -76,6 +76,7 @@ def update_request_message(
     channel_id: str,
     ts: str,
     logger,
+    reason: str | None = None,
 ) -> None:
     """Update an existing Slack message to reflect the latest decision."""
 
@@ -86,6 +87,7 @@ def update_request_message(
         request_id=request_id,
         decision=decision,
         decided_by=decided_by,
+        reason=reason,
     )
 
     try:

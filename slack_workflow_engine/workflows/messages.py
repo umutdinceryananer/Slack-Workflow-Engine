@@ -124,6 +124,7 @@ def build_request_decision_update(
     request_id: int,
     decision: str,
     decided_by: str,
+    reason: str | None = None,
 ) -> Dict[str, Any]:
     """Return an updated Slack message payload after a decision."""
 
@@ -146,6 +147,17 @@ def build_request_decision_update(
         ],
     }
     blocks.append(decision_block)
+
+    if reason:
+        blocks.append(
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*Reason:* {reason}",
+                },
+            }
+        )
 
     return {
         "text": f"{base['text']} {decision_label} by <@{decided_by}>.",

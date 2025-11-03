@@ -184,3 +184,32 @@ def test_update_request_message_updates_slack(workflow_definition):
     assert update_kwargs["ts"] == "1700000000.123456"
     assert ":white_check_mark:" in json.dumps(update_kwargs["blocks"])
     assert not logger.errors
+
+
+def test_update_request_message_includes_reason(workflow_definition):
+    dummy_client = DummyWebClient()
+    logger = DummyLogger()
+
+    submission = {"order_id": "X-4"}
+    request = save_request(
+        workflow_type=workflow_definition.type,
+        created_by="U123",
+        payload_json=canonical_json(submission),
+        request_key="key-101",
+    )
+
+    update_request_message(
+        client=dummy_client,
+        definition=workflow_definition,
+        submission=submission,
+        request_id=request.id,
+        decision="REJECTED",
+        decided_by="U555",
+        channel_id="CREFUND",
+        ts="1700000000.999999",
+        logger=logger,
+        reason="Insufficient data",
+    )
+
+    reason_payload = json.dumps(dummy_client.calls[-1][1]["blocks"])
+    assert "Insufficient data" in reason_payload
