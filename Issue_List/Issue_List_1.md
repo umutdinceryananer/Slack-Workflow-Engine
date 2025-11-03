@@ -172,7 +172,7 @@ This list translates the Part-1 scope and lock decisions into actionable issues.
   - Attempt by creator is rejected; non-creator approver succeeds.
   - Self-reject attempt is blocked; non-creator reject succeeds.
 
-## 15) Idempotency (Requests and Actions)
+## 15) Idempotency (Requests and Actions) ✅
 - Description: Ensure duplicate submissions and repeated clicks do not create duplicate effects.
 - Acceptance Criteria:
   - `request_key = sha256(type + user_id + canonical_payload)` unique index enforced.

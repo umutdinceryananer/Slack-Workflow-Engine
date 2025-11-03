@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from slack_bolt import App as SlackApp
 from slack_bolt.adapter.flask import SlackRequestHandler
 from slack_sdk.errors import SlackApiError
+from sqlalchemy import text
 
 from slack_workflow_engine.actions import is_user_authorized, parse_action_context
 from slack_workflow_engine.background import run_async
@@ -497,7 +498,27 @@ def create_app() -> Flask:
 
     @flask_app.route("/healthz", methods=["GET"])
     def healthz():
-        return jsonify({"ok": True})
+        health: dict[str, object] = {"ok": True}
+
+        try:
+            get_settings()
+            health["config"] = "valid"
+        except Exception as exc:  # pragma: no cover - defensive guard
+            health["config"] = "invalid"
+            health["config_error"] = str(exc)
+            health["ok"] = False
+
+        try:
+            with session_scope() as session:
+                session.execute(text("SELECT 1"))
+            health["db"] = "up"
+        except Exception as exc:
+            health["db"] = "down"
+            health["db_error"] = str(exc)
+            health["ok"] = False
+
+        status = 200 if health["ok"] else 503
+        return jsonify(health), status
 
     return flask_app
 
