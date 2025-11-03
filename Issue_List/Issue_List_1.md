@@ -131,7 +131,7 @@ This list translates the Part-1 scope and lock decisions into actionable issues.
   - Extended by Part-2 #7/#9 "Levels & Message Updates" (multi-level approvals and richer updates).
   - Related to Part-2 #10 "SLA/Timeout + Escalation per Level" and #11 "Delegation/Proxy/OOO".
 
-## 13) Reject Action Handler (+ Authorization)
+## 13) Reject Action Handler (+ Authorization) ✅
 - Description: Handle Reject clicks, enforce approver list, update status and message.
 - Acceptance Criteria:
   - User must be in `APPROVER_USER_IDS`; otherwise ephemeral "unauthorized" is shown.
