@@ -163,12 +163,14 @@ This list translates the Part-1 scope and lock decisions into actionable issues.
   - Signature mismatch: ensure ngrok URL matches Slack settings.
   - 3s ack warnings: app running; route reachable; ack occurs instantly.
  
-## 14) Self-Approval Guard
-- Description: Prevent the request creator from approving their own request.
+## 14) Self-Approval Guard ✅
+- Description: Prevent the request creator from approving or rejecting their own request.
 - Acceptance Criteria:
   - Creator attempting Approve receives an ephemeral "cannot approve own request".
+  - Creator attempting Reject receives an ephemeral "cannot reject own request".
 - Tests:
   - Attempt by creator is rejected; non-creator approver succeeds.
+  - Self-reject attempt is blocked; non-creator reject succeeds.
 
 ## 15) Idempotency (Requests and Actions)
 - Description: Ensure duplicate submissions and repeated clicks do not create duplicate effects.
