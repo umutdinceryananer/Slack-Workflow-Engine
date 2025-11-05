@@ -148,3 +148,22 @@ def test_slack_events_ack_is_immediate(monkeypatch):
     assert response.status_code == 200
     assert response.data == b""
 
+
+def test_home_handlers_registered(monkeypatch):
+    _seed_env(monkeypatch)
+
+    register_calls = []
+
+    def fake_register_home(app):
+        register_calls.append(app)
+
+    monkeypatch.setattr(app_module, "_register_home_handlers", fake_register_home)
+    monkeypatch.setattr(app_module, "_register_slash_handlers", lambda _app: None)
+    monkeypatch.setattr(app_module, "_register_view_handlers", lambda _app: None)
+    monkeypatch.setattr(app_module, "_register_action_handlers", lambda _app: None)
+    monkeypatch.setattr(app_module, "SlackRequestHandler", DummyHandler)
+
+    app_module.create_app()
+
+    assert len(register_calls) == 1
+    assert register_calls[0] is not None
