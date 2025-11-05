@@ -11,6 +11,8 @@ from slack_workflow_engine.home import (  # noqa: E402
     RequestSummary,
     build_home_placeholder_view,
     build_home_view,
+    HOME_APPROVE_ACTION_ID,
+    HOME_REJECT_ACTION_ID,
 )
 from slack_workflow_engine.home.filters import HomeFilters  # noqa: E402
 
@@ -79,6 +81,10 @@ def test_build_home_view_populates_sections() -> None:
     pending_section = blocks[9]["text"]["text"]
     assert "*Pending Approvals*" in pending_section
     assert "• *Refund* · `#20` · Pending" in pending_section
+    actions = blocks[10]["elements"]
+    action_ids = {element["action_id"] for element in actions}
+    assert HOME_APPROVE_ACTION_ID in action_ids
+    assert HOME_REJECT_ACTION_ID in action_ids
 
 
 def test_placeholder_view_matches_empty_state() -> None:
@@ -91,4 +97,5 @@ def test_placeholder_view_matches_empty_state() -> None:
     assert blocks[5]["text"]["text"].startswith("*My Requests*")
     assert blocks[7]["type"] == "actions"
     assert blocks[9]["text"]["text"].startswith("*Pending Approvals*")
+    assert blocks[10]["type"] != "actions" or len(blocks[10].get("elements", [])) == 0  # placeholder has no quick actions
     assert blocks[11]["type"] == "actions"

@@ -8,7 +8,7 @@ This list translates Part-2 (Home Tab, multi-level approvals, webhooks, RBAC, ob
 - Logs are structured JSON via structlog; no secrets/PII in logs.
 - Errors return JSON with a correlation `trace_id` when applicable.
 
-## 1) App Home Foundation + Debounced Publish
+## 1) App Home Foundation + Debounced Publish ✅ 
 - Description: Handle `app_home_opened`, assemble Home view, and publish with debouncing to respect rate limits.
 - Acceptance Criteria:
   - `app_home_opened` event handler registered.
@@ -17,7 +17,7 @@ This list translates Part-2 (Home Tab, multi-level approvals, webhooks, RBAC, ob
 - Tests:
   - Snapshot of initial Home payload; debounce unit test verifies single publish for rapid repeats.
 
-## 2) Home Lists: My Requests + Pending Approvals
+## 2) Home Lists: My Requests + Pending Approvals ✅
 - Description: Show the user’s last N created requests and items awaiting their approval.
 - Acceptance Criteria:
   - "My Requests" (latest 10) and "Awaiting My Approval" sections render from DB.
@@ -25,7 +25,7 @@ This list translates Part-2 (Home Tab, multi-level approvals, webhooks, RBAC, ob
 - Tests:
   - DB-backed fetch functions unit-tested; Home payload snapshot with populated and empty states.
 
-## 3) Home Filters/Sort + Pagination (offset-based)
+## 3) Home Filters/Sort + Pagination (offset-based) ✅
 - Description: Add filter by type/status/date; sort; simple offset-based pagination.
 - Acceptance Criteria:
   - Filter chips or section toggles for type/status/date.

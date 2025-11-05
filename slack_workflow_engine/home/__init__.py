@@ -12,6 +12,7 @@ from .filters import (
     validate_sort_order,
 )
 from .views import build_home_placeholder_view, build_home_view
+from .actions import HOME_APPROVE_ACTION_ID, HOME_REJECT_ACTION_ID
 
 __all__ = [
     "HomeDebouncer",
@@ -23,6 +24,8 @@ __all__ = [
     "normalise_filters",
     "validate_sort_field",
     "validate_sort_order",
+    "HOME_APPROVE_ACTION_ID",
+    "HOME_REJECT_ACTION_ID",
     "build_home_view",
     "build_home_placeholder_view",
     "list_pending_approvals",

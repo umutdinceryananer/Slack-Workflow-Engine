@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC
 from typing import Iterable, Sequence
 
+from .actions import HOME_APPROVE_ACTION_ID, HOME_REJECT_ACTION_ID
 from .data import RequestSummary
 from .filters import HomeFilters, PaginationState
 
@@ -135,6 +136,41 @@ def _pagination_blocks(title: str, prefix: str, pagination: PaginationState) -> 
     return [context_block, actions_block]
 
 
+def _decision_payload(summary: RequestSummary) -> str:
+    import json
+
+    payload = json.dumps({"request_id": summary.id, "workflow_type": summary.workflow_type})
+    return payload
+
+
+def _pending_action_blocks(pending: Sequence[RequestSummary]) -> list[dict]:
+    blocks: list[dict] = []
+    for summary in pending:
+        blocks.append(
+            {
+                "type": "actions",
+                "block_id": f"home_pending_actions_{summary.id}",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "Approve", "emoji": True},
+                        "style": "primary",
+                        "action_id": HOME_APPROVE_ACTION_ID,
+                        "value": _decision_payload(summary),
+                    },
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "Reject", "emoji": True},
+                        "style": "danger",
+                        "action_id": HOME_REJECT_ACTION_ID,
+                        "value": _decision_payload(summary),
+                    },
+                ],
+            }
+        )
+    return blocks
+
+
 def build_home_view(
     *,
     my_requests: Sequence[RequestSummary] | Iterable[RequestSummary],
@@ -184,6 +220,9 @@ def build_home_view(
             include_decider=False,
         )
     )
+
+    if pending_approvals:
+        blocks.extend(_pending_action_blocks(pending_approvals))
 
     blocks.extend(_pagination_blocks("Pending Approvals", "pending", pending_pagination))
 
