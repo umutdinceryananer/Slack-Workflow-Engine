@@ -863,7 +863,14 @@ from slack_workflow_engine.models import (
 
 
 from slack_workflow_engine.logging_config import configure_logging
-from slack_workflow_engine.home import HomeDebouncer, build_home_placeholder_view, build_home_view, list_pending_approvals, list_recent_requests
+from slack_workflow_engine.home import (
+    HomeDebouncer,
+    build_home_placeholder_view,
+    build_home_view,
+    list_pending_approvals,
+    list_recent_requests,
+    normalise_filters,
+)
 
 
 
@@ -3128,16 +3135,45 @@ def _handle_app_home_opened(event, client, logger):
 
         settings = get_settings()
 
+        request_filters = normalise_filters(
+            sort_by="created_at",
+            sort_order="desc",
+            limit=settings.home_recent_limit,
+            default_limit=settings.home_recent_limit,
+        )
+
+        pending_filters = normalise_filters(
+            statuses=("PENDING",),
+            sort_by="created_at",
+            sort_order="asc",
+            limit=settings.home_pending_limit,
+            default_limit=settings.home_pending_limit,
+        )
+
         with session_scope() as session:
             my_requests = list_recent_requests(
                 session,
                 user_id=user_id,
-                limit=settings.home_recent_limit,
+                workflow_types=request_filters.workflow_types,
+                statuses=request_filters.statuses,
+                start_at=request_filters.start_at,
+                end_at=request_filters.end_at,
+                sort_by=request_filters.sort_by,
+                sort_order=request_filters.sort_order,
+                limit=request_filters.limit,
+                offset=request_filters.offset,
             )
             pending = list_pending_approvals(
                 session,
                 approver_id=user_id,
-                limit=settings.home_pending_limit,
+                workflow_types=pending_filters.workflow_types,
+                statuses=pending_filters.statuses,
+                start_at=pending_filters.start_at,
+                end_at=pending_filters.end_at,
+                sort_by=pending_filters.sort_by,
+                sort_order=pending_filters.sort_order,
+                limit=pending_filters.limit,
+                offset=pending_filters.offset,
             )
 
         view = build_home_view(my_requests=my_requests, pending_approvals=pending)
@@ -7927,7 +7963,6 @@ if __name__ == "__main__":  # pragma: no cover - manual execution helper
 
 
     application.run(host="0.0.0.0", port=3000, debug=True)
-
 
 
 

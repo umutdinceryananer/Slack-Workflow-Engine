@@ -11,6 +11,7 @@ if str(ROOT) not in sys.path:  # pragma: no cover
     sys.path.insert(0, str(ROOT))
 
 import app as app_module  # noqa: E402
+from slack_workflow_engine.home.filters import HomeFilters  # noqa: E402
 
 
 class DummyBoltApp:
@@ -68,13 +69,33 @@ class RecordingStructLogger(RecordingLogger):
         return self
 
 
-def _register_handler(monkeypatch, debouncer, *, session_scope, recent_fn, pending_fn, build_view, settings):
+def _register_handler(
+    monkeypatch,
+    debouncer,
+    *,
+    session_scope,
+    recent_fn,
+    pending_fn,
+    build_view,
+    settings,
+    filter_results,
+):
     monkeypatch.setattr(app_module, "HOME_DEBOUNCER", debouncer)
     monkeypatch.setattr(app_module, "session_scope", session_scope)
     monkeypatch.setattr(app_module, "list_recent_requests", recent_fn)
     monkeypatch.setattr(app_module, "list_pending_approvals", pending_fn)
     monkeypatch.setattr(app_module, "build_home_view", build_view)
     monkeypatch.setattr(app_module, "get_settings", lambda: settings)
+
+    filters_iter = iter(filter_results)
+
+    def fake_normalise_filters(**_kwargs):
+        try:
+            return next(filters_iter)
+        except StopIteration:  # pragma: no cover - guard against extra calls
+            raise AssertionError("Unexpected normalise_filters invocation")
+
+    monkeypatch.setattr(app_module, "normalise_filters", fake_normalise_filters)
 
     bolt_app = DummyBoltApp()
     app_module._register_home_handlers(bolt_app)
@@ -93,11 +114,11 @@ def test_home_handler_publishes_when_not_debounced(monkeypatch):
     recent_calls = []
     pending_calls = []
 
-    def fake_recent(session, *, user_id, limit):
+    def fake_recent(session, *, user_id, limit, **kwargs):
         recent_calls.append((session, user_id, limit))
         return [SimpleNamespace(id=1)]
 
-    def fake_pending(session, *, approver_id, limit):
+    def fake_pending(session, *, approver_id, limit, **kwargs):
         pending_calls.append((session, approver_id, limit))
         return [SimpleNamespace(id=2)]
 
@@ -118,6 +139,10 @@ def test_home_handler_publishes_when_not_debounced(monkeypatch):
         pending_fn=fake_pending,
         build_view=fake_build_view,
         settings=SimpleNamespace(home_recent_limit=5, home_pending_limit=7),
+        filter_results=(
+            HomeFilters(None, None, None, None, "created_at", "desc", 5, 0),
+            HomeFilters(None, ["PENDING"], None, None, "created_at", "asc", 7, 0),
+        ),
     )
 
     client = DummyClient()
@@ -152,6 +177,7 @@ def test_home_handler_skips_publish_when_debounced(monkeypatch):
         pending_fn=fail,
         build_view=fail,
         settings=None,
+        filter_results=(HomeFilters(None, None, None, None, "created_at", "desc", 10, 0),),
     )
 
     client = DummyClient()
@@ -184,6 +210,10 @@ def test_home_handler_handles_empty_data(monkeypatch):
             "blocks": [my_requests, pending_approvals],
         },
         settings=SimpleNamespace(home_recent_limit=3, home_pending_limit=3),
+        filter_results=(
+            HomeFilters(None, None, None, None, "created_at", "desc", 3, 0),
+            HomeFilters(None, ["PENDING"], None, None, "created_at", "asc", 3, 0),
+        ),
     )
 
     client = DummyClient()
@@ -214,6 +244,10 @@ def test_home_handler_logs_on_slack_error(monkeypatch):
         pending_fn=lambda *_, **__: [],
         build_view=lambda **_: {"type": "home", "blocks": []},
         settings=SimpleNamespace(home_recent_limit=5, home_pending_limit=5),
+        filter_results=(
+            HomeFilters(None, None, None, None, "created_at", "desc", 5, 0),
+            HomeFilters(None, ["PENDING"], None, None, "created_at", "asc", 5, 0),
+        ),
     )
 
     class FailingClient(DummyClient):
