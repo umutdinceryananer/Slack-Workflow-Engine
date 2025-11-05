@@ -144,3 +144,61 @@ def test_list_pending_approvals_empty_for_unknown_user():
     with factory() as session:
         result = list_pending_approvals(session, approver_id="", limit=5)
     assert result == []
+
+
+def test_list_recent_requests_supports_filters_sort_and_offset():
+    base = datetime(2024, 5, 1, tzinfo=UTC)
+    factory = get_session_factory()
+
+    with factory() as session:
+        _add_request(session, seq=1, workflow_type="refund", created_by="U999", created_at=base - timedelta(days=2))
+        _add_request(session, seq=2, workflow_type="refund", created_by="U123", created_at=base - timedelta(days=2), status="APPROVED")
+        _add_request(session, seq=3, workflow_type="expense", created_by="U123", created_at=base - timedelta(days=1))
+        _add_request(session, seq=4, workflow_type="expense", created_by="U123", created_at=base)
+        _add_request(session, seq=5, workflow_type="expense", created_by="U123", created_at=base + timedelta(days=1))
+        session.commit()
+
+    with factory() as session:
+        results = list_recent_requests(
+            session,
+            user_id="U123",
+            workflow_types=["expense"],
+            statuses=["PENDING"],
+            start_at=base - timedelta(days=2),
+            end_at=base,
+            sort_by="created_at",
+            sort_order="asc",
+            offset=1,
+            limit=1,
+        )
+
+    assert len(results) == 1
+    assert results[0].id == 4
+    assert results[0].workflow_type == "expense"
+    assert results[0].status == "PENDING"
+
+
+def test_list_pending_approvals_supports_sort_and_offset():
+    base = datetime(2024, 6, 1, tzinfo=UTC)
+    factory = get_session_factory()
+
+    with factory() as session:
+        _add_request(session, seq=1, workflow_type="refund", created_by="U100", created_at=base, status="PENDING")
+        _add_request(session, seq=2, workflow_type="expense", created_by="U101", created_at=base + timedelta(hours=1), status="PENDING")
+        _add_request(session, seq=3, workflow_type="refund", created_by="U102", created_at=base + timedelta(hours=2), status="APPROVED")
+        _add_request(session, seq=4, workflow_type="pto", created_by="U103", created_at=base + timedelta(hours=3), status="PENDING")
+        session.commit()
+
+    with factory() as session:
+        results = list_pending_approvals(
+            session,
+            approver_id="U200",
+            statuses=["PENDING"],
+            sort_by="type",
+            sort_order="desc",
+            offset=1,
+            limit=2,
+        )
+
+    assert len(results) == 2
+    assert [summary.workflow_type for summary in results] == ["pto", "expense"]

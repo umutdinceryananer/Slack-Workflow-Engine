@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Iterable, List, Sequence
+from datetime import UTC, datetime
+from typing import Iterable, List, Literal, Sequence
 
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
@@ -43,18 +43,83 @@ def _to_summaries(session: Session, statement: Select) -> List[RequestSummary]:
     ]
 
 
-def list_recent_requests(session: Session, *, user_id: str, limit: int = 10) -> List[RequestSummary]:
-    """Return the latest requests created by *user_id*, newest first."""
+def _normalise_dt(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _apply_filters(
+    statement: Select,
+    *,
+    workflow_types: Sequence[str] | Iterable[str] | None,
+    statuses: Sequence[str] | Iterable[str] | None,
+    start_at: datetime | None,
+    end_at: datetime | None,
+) -> Select:
+    if workflow_types:
+        statement = statement.where(Request.type.in_(tuple(dict.fromkeys(workflow_types))))
+
+    if statuses:
+        statement = statement.where(Request.status.in_(tuple(dict.fromkeys(statuses))))
+
+    start_at = _normalise_dt(start_at)
+    end_at = _normalise_dt(end_at)
+
+    if start_at is not None:
+        statement = statement.where(Request.created_at >= start_at)
+
+    if end_at is not None:
+        statement = statement.where(Request.created_at <= end_at)
+
+    return statement
+
+
+def _apply_sort(statement: Select, *, sort_by: str, sort_order: Literal["asc", "desc"] = "desc") -> Select:
+    order = sort_order.lower()
+    descending = order == "desc"
+
+    if sort_by == "status":
+        clause = Request.status.desc() if descending else Request.status.asc()
+    elif sort_by == "type":
+        clause = Request.type.desc() if descending else Request.type.asc()
+    else:
+        clause = Request.created_at.desc() if descending else Request.created_at.asc()
+
+    return statement.order_by(clause)
+
+
+def list_recent_requests(
+    session: Session,
+    *,
+    user_id: str,
+    limit: int = 10,
+    offset: int = 0,
+    workflow_types: Sequence[str] | Iterable[str] | None = None,
+    statuses: Sequence[str] | Iterable[str] | None = None,
+    start_at: datetime | None = None,
+    end_at: datetime | None = None,
+    sort_by: Literal["created_at", "status", "type"] = "created_at",
+    sort_order: Literal["asc", "desc"] = "desc",
+) -> List[RequestSummary]:
+    """Return requests created by *user_id* applying optional filters."""
 
     if not user_id:
         return []
 
-    statement = (
-        select(Request)
-        .where(Request.created_by == user_id)
-        .order_by(Request.created_at.desc())
-        .limit(limit)
+    statement = select(Request).where(Request.created_by == user_id)
+    statement = _apply_filters(
+        statement,
+        workflow_types=workflow_types,
+        statuses=statuses,
+        start_at=start_at,
+        end_at=end_at,
     )
+
+    statement = _apply_sort(statement, sort_by=sort_by, sort_order=sort_order)
+    statement = statement.offset(max(offset, 0)).limit(limit)
 
     return _to_summaries(session, statement)
 
@@ -64,27 +129,30 @@ def list_pending_approvals(
     *,
     approver_id: str,
     limit: int = 10,
+    offset: int = 0,
     workflow_types: Sequence[str] | Iterable[str] | None = None,
+    statuses: Sequence[str] | Iterable[str] | None = ("PENDING",),
+    start_at: datetime | None = None,
+    end_at: datetime | None = None,
+    sort_by: Literal["created_at", "status", "type"] = "created_at",
+    sort_order: Literal["asc", "desc"] = "asc",
 ) -> List[RequestSummary]:
-    """Return pending requests that require attention from *approver_id*.
-
-    The current implementation assumes that approver eligibility is managed
-    at a higher layer. Optional *workflow_types* can be supplied to narrow
-    results to specific workflows.
-    """
+    """Return requests awaiting the attention of *approver_id* with filters."""
 
     if not approver_id:
         return []
 
-    statement = select(Request).where(Request.status == "PENDING")
+    statement = select(Request).where(Request.created_by != approver_id)
 
-    if approver_id:
-        statement = statement.where(Request.created_by != approver_id)
+    statement = _apply_filters(
+        statement,
+        workflow_types=workflow_types,
+        statuses=statuses,
+        start_at=start_at,
+        end_at=end_at,
+    )
 
-    if workflow_types:
-        filter_types = tuple(dict.fromkeys(workflow_types))
-        statement = statement.where(Request.type.in_(filter_types))
-
-    statement = statement.order_by(Request.created_at.asc()).limit(limit)
+    statement = _apply_sort(statement, sort_by=sort_by, sort_order=sort_order)
+    statement = statement.offset(max(offset, 0)).limit(limit)
 
     return _to_summaries(session, statement)
