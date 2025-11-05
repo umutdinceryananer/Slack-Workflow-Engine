@@ -9,7 +9,7 @@ Central, configuration-driven Slack workflow bot. A single Slack app handles mul
 - Structured JSON logging with end-to-end trace IDs; `/healthz` endpoint
 
 **Phase-2 Foundations (in progress)**
-- App Home placeholder publishes on `app_home_opened` with per-user debouncing to respect Slack rate limits
+- App Home publishes on `app_home_opened`, debouncing per user and surfacing recent requests alongside pending approvals
 
 **Tech Stack**
 - Python 3.11+, Slack Bolt for Python, Flask, SQLAlchemy, Pydantic, structlog
@@ -54,6 +54,7 @@ Central, configuration-driven Slack workflow bot. A single Slack app handles mul
      - `SLACK_SIGNING_SECRET`
      - `APPROVER_USER_IDS` (comma-separated Slack user IDs, e.g. `U123,U456`)
      - `DATABASE_URL` (`sqlite:///local.db` is fine for local runs)
+      - Optional: `HOME_RECENT_LIMIT` / `HOME_PENDING_LIMIT` to control how many items the App Home sections display (defaults to `10`)
    - Before running the app in a PowerShell session, load the variables:
      ```powershell
      Get-Content .env | ForEach-Object {
@@ -85,7 +86,7 @@ Central, configuration-driven Slack workflow bot. A single Slack app handles mul
    - In Slack, run `/request refund`, fill the modal, and submit.
    - A channel message appears with Approve/Reject buttons; only `APPROVER_USER_IDS` can confirm.
    - Approving or rejecting updates the database and edits the Slack message. Unauthorized users receive an ephemeral warning.
-   - Open the bot’s App Home (Slack → Messages → App → Home) to see the placeholder layout; repeated opens within a few seconds are debounced.
+   - Open the bot’s App Home (Slack → Messages → App → Home) to review “My Requests” and “Pending Approvals”. Entries appear after you submit/approve, and rapid refreshes are debounced for rate-limit safety.
 
 9. **Run automated tests**
    ```bash
