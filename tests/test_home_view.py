@@ -1,4 +1,11 @@
-from slack_workflow_engine.home import build_home_placeholder_view
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:  # pragma: no cover
+    sys.path.insert(0, str(ROOT))
+
+from slack_workflow_engine.home import build_home_placeholder_view  # noqa: E402
 
 
 def test_build_home_placeholder_view_snapshot() -> None:
