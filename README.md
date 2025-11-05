@@ -9,7 +9,7 @@ Central, configuration-driven Slack workflow bot. A single Slack app handles mul
 - Structured JSON logging with end-to-end trace IDs; `/healthz` endpoint
 
 **Phase-2 Foundations (in progress)**
-- App Home publishes on `app_home_opened`, debouncing per user and surfacing recent requests alongside pending approvals
+- App Home publishes on `app_home_opened`, debouncing per user, surfacing recent requests alongside pending approvals, and letting you page/filter results
 
 **Tech Stack**
 - Python 3.11+, Slack Bolt for Python, Flask, SQLAlchemy, Pydantic, structlog
@@ -86,7 +86,7 @@ Central, configuration-driven Slack workflow bot. A single Slack app handles mul
    - In Slack, run `/request refund`, fill the modal, and submit.
    - A channel message appears with Approve/Reject buttons; only `APPROVER_USER_IDS` can confirm.
    - Approving or rejecting updates the database and edits the Slack message. Unauthorized users receive an ephemeral warning.
-   - Open the bot’s App Home (Slack → Messages → App → Home) to review “My Requests” and “Pending Approvals”. Entries appear after you submit/approve, and rapid refreshes are debounced for rate-limit safety.
+   - Open the bot’s App Home (Slack → Messages → App → Home) to review “My Requests” and “Pending Approvals”. Entries appear after you submit/approve, and rapid refreshes are debounced for rate-limit safety. Use the pagination buttons and filter summary to explore larger datasets.
 
 9. **Run automated tests**
    ```bash
