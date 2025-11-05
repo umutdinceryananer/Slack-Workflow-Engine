@@ -60,6 +60,14 @@ class HomeFilters:
     offset: int
 
 
+@dataclass(frozen=True)
+class PaginationState:
+    offset: int = 0
+    limit: int = 10
+    has_previous: bool = False
+    has_more: bool = False
+
+
 def clamp_limit(value: int | None, *, default: int, minimum: int = 1, maximum: int = 50) -> int:
     if value is None:
         return default

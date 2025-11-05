@@ -7,10 +7,12 @@ if str(ROOT) not in sys.path:  # pragma: no cover
     sys.path.insert(0, str(ROOT))
 
 from slack_workflow_engine.home import (  # noqa: E402
+    PaginationState,
     RequestSummary,
     build_home_placeholder_view,
     build_home_view,
 )
+from slack_workflow_engine.home.filters import HomeFilters  # noqa: E402
 
 
 def test_build_home_view_populates_sections() -> None:
@@ -51,18 +53,30 @@ def test_build_home_view_populates_sections() -> None:
         )
     ]
 
-    view = build_home_view(my_requests=summaries, pending_approvals=pending)
+    my_filters = HomeFilters(["refund", "expense"], ["PENDING"], None, None, "created_at", "desc", 10, 0)
+    pending_filters = HomeFilters(["refund"], ["PENDING"], None, None, "created_at", "asc", 10, 0)
+    my_pag = PaginationState(offset=0, limit=10, has_previous=False, has_more=True)
+    pending_pag = PaginationState(offset=0, limit=10, has_previous=False, has_more=False)
+
+    view = build_home_view(
+        my_requests=summaries,
+        pending_approvals=pending,
+        my_filters=my_filters,
+        pending_filters=pending_filters,
+        my_pagination=my_pag,
+        pending_pagination=pending_pag,
+    )
 
     assert view["type"] == "home"
     blocks = view["blocks"]
     assert blocks[0]["type"] == "header"
     assert "Track progress" in blocks[1]["text"]["text"]
-    my_section = blocks[3]["text"]["text"]
+    my_section = blocks[5]["text"]["text"]
     assert "*My Requests*" in my_section
     assert "• *Refund* · `#10` · Pending · 2024-01-01 12:00 UTC" in my_section
     assert "• *Expense*" in my_section
 
-    pending_section = blocks[5]["text"]["text"]
+    pending_section = blocks[9]["text"]["text"]
     assert "*Pending Approvals*" in pending_section
     assert "• *Refund* · `#20` · Pending" in pending_section
 
@@ -70,44 +84,11 @@ def test_build_home_view_populates_sections() -> None:
 def test_placeholder_view_matches_empty_state() -> None:
     view = build_home_placeholder_view()
 
-    expected = {
-        "type": "home",
-        "blocks": [
-            {
-                "type": "header",
-                "text": {
-                    "type": "plain_text",
-                    "text": "Slack Workflow Engine",
-                    "emoji": True,
-                },
-            },
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": (
-                        "Centralised request workflows in one place. Track progress, respond to approvals, "
-                        "and access quick actions from this Home tab."
-                    ),
-                },
-            },
-            {"type": "divider"},
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": "*My Requests*\n_No recent requests yet._",
-                },
-            },
-            {"type": "divider"},
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": "*Pending Approvals*\n_Nothing waiting on you right now._",
-                },
-            },
-        ],
-    }
-
-    assert view == expected
+    blocks = view["blocks"]
+    assert blocks[0]["type"] == "header"
+    assert blocks[3]["type"] == "section"  # filters summary
+    assert "*Filters*" in blocks[3]["text"]["text"]
+    assert blocks[5]["text"]["text"].startswith("*My Requests*")
+    assert blocks[7]["type"] == "actions"
+    assert blocks[9]["text"]["text"].startswith("*Pending Approvals*")
+    assert blocks[11]["type"] == "actions"

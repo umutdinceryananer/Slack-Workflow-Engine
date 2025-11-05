@@ -124,8 +124,8 @@ def test_home_handler_publishes_when_not_debounced(monkeypatch):
 
     view_calls = []
 
-    def fake_build_view(*, my_requests, pending_approvals):
-        view_calls.append((my_requests, pending_approvals))
+    def fake_build_view(*, my_requests, pending_approvals, **kwargs):
+        view_calls.append((my_requests, pending_approvals, kwargs))
         return {"type": "home", "blocks": []}
 
     struct_logger = RecordingStructLogger()
@@ -153,7 +153,8 @@ def test_home_handler_publishes_when_not_debounced(monkeypatch):
     assert debouncer.calls == ["U123"]
     assert recent_calls == [(dummy_session, "U123", 5)]
     assert pending_calls == [(dummy_session, "U123", 7)]
-    assert view_calls == [([SimpleNamespace(id=1)], [SimpleNamespace(id=2)])]
+    assert view_calls[0][0] == [SimpleNamespace(id=1)]
+    assert view_calls[0][1] == [SimpleNamespace(id=2)]
     assert client.calls == [{"user_id": "U123", "view": {"type": "home", "blocks": []}}]
     assert any(message == "app_home_data_prepared" and kwargs == {"recent_count": 1, "pending_count": 1} for message, kwargs in struct_logger.info_calls)
 
@@ -205,7 +206,7 @@ def test_home_handler_handles_empty_data(monkeypatch):
         session_scope=fake_scope,
         recent_fn=lambda *_, **__: [],
         pending_fn=lambda *_, **__: [],
-        build_view=lambda *, my_requests, pending_approvals: {
+        build_view=lambda *, my_requests, pending_approvals, **kwargs: {
             "type": "home",
             "blocks": [my_requests, pending_approvals],
         },

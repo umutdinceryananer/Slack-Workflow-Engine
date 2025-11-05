@@ -4,6 +4,7 @@ from .data import RequestSummary, list_pending_approvals, list_recent_requests
 from .debounce import HomeDebouncer
 from .filters import (
     HomeFilters,
+    PaginationState,
     clamp_limit,
     clamp_offset,
     normalise_filters,
@@ -16,6 +17,7 @@ __all__ = [
     "HomeDebouncer",
     "RequestSummary",
     "HomeFilters",
+    "PaginationState",
     "clamp_limit",
     "clamp_offset",
     "normalise_filters",
