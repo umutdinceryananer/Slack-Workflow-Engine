@@ -78,6 +78,9 @@ def list_pending_approvals(
 
     statement = select(Request).where(Request.status == "PENDING")
 
+    if approver_id:
+        statement = statement.where(Request.created_by != approver_id)
+
     if workflow_types:
         filter_types = tuple(dict.fromkeys(workflow_types))
         statement = statement.where(Request.type.in_(filter_types))

@@ -29,6 +29,20 @@ def test_get_settings_parses_expected_fields(monkeypatch):
     assert settings.signing_secret == "secret"
     assert settings.approver_user_ids == ["U1", "U2", "U3"]
     assert settings.database_url == "sqlite:///local.db"
+    assert settings.home_recent_limit == 10
+    assert settings.home_pending_limit == 10
+
+
+def test_home_limits_override(monkeypatch):
+    _seed_env(monkeypatch)
+    monkeypatch.setenv("HOME_RECENT_LIMIT", "7")
+    monkeypatch.setenv("HOME_PENDING_LIMIT", "12")
+    config.get_settings.cache_clear()
+
+    settings = config.get_settings()
+
+    assert settings.home_recent_limit == 7
+    assert settings.home_pending_limit == 12
 
 
 def test_missing_environment_variables_raise_runtime_error(monkeypatch):

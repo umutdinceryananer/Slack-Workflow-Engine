@@ -115,6 +115,13 @@ def test_list_pending_approvals_filters_by_status_and_type():
             created_at=base + timedelta(minutes=3),
             status="APPROVED",
         )
+        _add_request(
+            session,
+            seq=5,
+            workflow_type="refund",
+            created_by="U1",
+            created_at=base + timedelta(minutes=4),
+        )
         session.commit()
 
     with factory() as session:
@@ -129,6 +136,7 @@ def test_list_pending_approvals_filters_by_status_and_type():
     assert [summary.workflow_type for summary in results] == ["refund", "refund"]
     assert [summary.status for summary in results] == ["PENDING", "PENDING"]
     assert results[0].created_at < results[1].created_at
+    assert all(summary.created_by != "U1" for summary in results)
 
 
 def test_list_pending_approvals_empty_for_unknown_user():

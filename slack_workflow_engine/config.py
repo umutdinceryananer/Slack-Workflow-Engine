@@ -16,6 +16,8 @@ class AppSettings(BaseModel):
     signing_secret: str = Field(..., alias="SLACK_SIGNING_SECRET")
     approver_user_ids: List[str] = Field(..., alias="APPROVER_USER_IDS")
     database_url: str = Field(..., alias="DATABASE_URL")
+    home_recent_limit: int = Field(10, alias="HOME_RECENT_LIMIT")
+    home_pending_limit: int = Field(10, alias="HOME_PENDING_LIMIT")
 
     @field_validator("approver_user_ids", mode="before")
     @classmethod
@@ -23,6 +25,13 @@ class AppSettings(BaseModel):
         if isinstance(value, list):
             return [item.strip() for item in value if item.strip()]
         return [item.strip() for item in value.split(",") if item.strip()]
+
+    @field_validator("home_recent_limit", "home_pending_limit")
+    @classmethod
+    def _ensure_positive(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("Home limits must be greater than zero")
+        return value
 
 
 def _format_missing(fields: Iterable[str]) -> str:

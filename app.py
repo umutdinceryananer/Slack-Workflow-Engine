@@ -863,7 +863,7 @@ from slack_workflow_engine.models import (
 
 
 from slack_workflow_engine.logging_config import configure_logging
-from slack_workflow_engine.home import HomeDebouncer, build_home_placeholder_view
+from slack_workflow_engine.home import HomeDebouncer, build_home_placeholder_view, build_home_view, list_pending_approvals, list_recent_requests
 
 
 
@@ -3126,7 +3126,27 @@ def _handle_app_home_opened(event, client, logger):
 
             return
 
-        view = build_home_placeholder_view()
+        settings = get_settings()
+
+        with session_scope() as session:
+            my_requests = list_recent_requests(
+                session,
+                user_id=user_id,
+                limit=settings.home_recent_limit,
+            )
+            pending = list_pending_approvals(
+                session,
+                approver_id=user_id,
+                limit=settings.home_pending_limit,
+            )
+
+        view = build_home_view(my_requests=my_requests, pending_approvals=pending)
+
+        log.info(
+            "app_home_data_prepared",
+            recent_count=len(my_requests),
+            pending_count=len(pending),
+        )
 
         client.views_publish(user_id=user_id, view=view)
 
@@ -7907,7 +7927,6 @@ if __name__ == "__main__":  # pragma: no cover - manual execution helper
 
 
     application.run(host="0.0.0.0", port=3000, debug=True)
-
 
 
 
