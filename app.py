@@ -866,6 +866,8 @@ from slack_workflow_engine.logging_config import configure_logging
 from slack_workflow_engine.home import (
     HomeDebouncer,
     PaginationState,
+    HOME_APPROVE_ACTION_ID,
+    HOME_REJECT_ACTION_ID,
     build_home_placeholder_view,
     build_home_view,
     list_pending_approvals,
@@ -5050,6 +5052,133 @@ def _handle_reject_action(ack, body, client, logger):
 
         unbind_contextvars("trace_id")
 
+
+def _ack_home_error(ack, block_id: str | None, message: str) -> None:
+
+    target = block_id or "home_action_error"
+
+    ack(
+        {
+            "response_action": "errors",
+            "errors": {
+                target: message,
+            },
+        }
+    )
+
+
+def _handle_home_action(decision: str, ack, body, client, logger):
+
+    trace_id = str(uuid4())
+
+    bind_contextvars(trace_id=trace_id)
+
+    log = structlog.get_logger().bind(trace_id=trace_id)
+
+    try:
+
+        actions = body.get("actions") or []
+
+        if not actions:
+
+            _ack_home_error(ack, None, "Unable to process this action payload.")
+
+            log.warning("home_action_missing_payload")
+
+            return
+
+        action_payload = actions[0]
+
+        block_id = action_payload.get("block_id") or "home_action"
+
+        try:
+
+            context = parse_action_context(action_payload.get("value", ""))
+
+        except ValueError:
+
+            _ack_home_error(ack, block_id, "This action payload is invalid. Please refresh and try again.")
+
+            log.warning("invalid_home_action_payload")
+
+            return
+
+        log = log.bind(request_id=context.request_id, workflow_type=context.workflow_type)
+
+        user_id = body.get("user", {}).get("id")
+
+        if not user_id:
+
+            _ack_home_error(ack, block_id, "We could not identify the acting user.")
+
+            log.warning("home_action_missing_user")
+
+            return
+
+        settings = get_settings()
+
+        if not is_user_authorized(user_id, settings.approver_user_ids):
+
+            _ack_home_error(ack, block_id, "You are not authorized to take action on this request.")
+
+            log.warning("unauthorized_home_attempt", user_id=user_id)
+
+            return
+
+        with session_scope() as session:
+
+            request = session.get(Request, context.request_id)
+
+            if request is None:
+
+                _ack_home_error(ack, block_id, "Request could not be found.")
+
+                log.warning("home_request_missing", user_id=user_id)
+
+                return
+
+            if request.type != context.workflow_type:
+
+                _ack_home_error(ack, block_id, "Workflow type mismatch for this request.")
+
+                log.warning("home_workflow_type_mismatch", request_type=request.type)
+
+                return
+
+            if request.created_by == user_id:
+
+                _ack_home_error(ack, block_id, "You cannot approve your own request.")
+
+                log.info("home_self_action_blocked", user_id=user_id)
+
+                return
+
+            if request.status != "PENDING":
+
+                _ack_home_error(ack, block_id, "This request has already been decided.")
+
+                log.info("home_decision_already_recorded", request_status=request.status, user_id=user_id)
+
+                return
+
+        ack()
+
+        log.info("home_action_validated", decision=decision, user_id=user_id)
+
+    finally:
+
+        unbind_contextvars("trace_id")
+
+
+def _handle_home_approve_action(ack, body, client, logger):
+
+    _handle_home_action("APPROVED", ack, body, client, logger)
+
+
+def _handle_home_reject_action(ack, body, client, logger):
+
+    _handle_home_action("REJECTED", ack, body, client, logger)
+
 def _register_action_handlers(bolt_app: SlackApp) -> None:
 
 
@@ -5275,6 +5404,18 @@ def _register_action_handlers(bolt_app: SlackApp) -> None:
 
 
         _handle_reject_action(ack=ack, body=body, client=client, logger=logger)
+
+
+    @bolt_app.action(HOME_APPROVE_ACTION_ID)
+    def handle_home_approve(ack, body, client, logger):
+
+        _handle_home_approve_action(ack=ack, body=body, client=client, logger=logger)
+
+
+    @bolt_app.action(HOME_REJECT_ACTION_ID)
+    def handle_home_reject(ack, body, client, logger):
+
+        _handle_home_reject_action(ack=ack, body=body, client=client, logger=logger)
 
 
 
@@ -7995,7 +8136,6 @@ if __name__ == "__main__":  # pragma: no cover - manual execution helper
 
 
     application.run(host="0.0.0.0", port=3000, debug=True)
-
 
 
 
