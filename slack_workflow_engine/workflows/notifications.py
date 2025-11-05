@@ -21,6 +21,7 @@ def publish_request_message(
     submission: Mapping[str, Any],
     request_id: int,
     logger,
+    trace_id: str | None = None,
 ) -> None:
     """Post the workflow request message to Slack and store its reference."""
 
@@ -96,6 +97,7 @@ def update_request_message(
     ts: str,
     logger,
     reason: str | None = None,
+    trace_id: str | None = None,
 ) -> None:
     """Update an existing Slack message to reflect the latest decision."""
 

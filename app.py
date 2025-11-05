@@ -1295,7 +1295,7 @@ def _load_workflow_definition_by_type(workflow_type: str):
 
 
 
-def _open_modal(client, trigger_id: str, view: dict, workflow_type: str, logger) -> None:
+def _open_modal(client, trigger_id: str, view: dict, workflow_type: str, logger, trace_id: str | None = None) -> None:
 
 
 
