@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from datetime import UTC
+from typing import Iterable, Sequence
+
+from .data import RequestSummary
 
 
-def _divider() -> Dict[str, Any]:
+def _divider() -> dict:
     """Return a reusable divider block."""
+
     return {"type": "divider"}
 
 
-def _section(text: str) -> Dict[str, Any]:
+def _section(text: str) -> dict:
     """Return a simple mrkdwn section block."""
+
     return {
         "type": "section",
         "text": {
@@ -21,55 +26,86 @@ def _section(text: str) -> Dict[str, Any]:
     }
 
 
-def _actionless_section(title: str, body: str) -> Dict[str, Any]:
-    """Return a titled section with body text and no interactive elements."""
-    return _section(f"*{title}*\n{body}")
+def _format_status(status: str) -> str:
+    return status.replace("_", " ").title()
 
 
-def build_home_placeholder_view() -> Dict[str, Any]:
-    """Build the initial placeholder Home tab structure.
+def _format_type(workflow_type: str) -> str:
+    return workflow_type.replace("_", " ").title()
 
-    This view intentionally uses static placeholder content. Later commits will
-    populate the sections with real data and interactive components.
-    """
 
-    header_block: Dict[str, Any] = {
-        "type": "header",
-        "text": {
-            "type": "plain_text",
-            "text": "Slack Workflow Engine",
-            "emoji": True,
+def _format_timestamp(value) -> str:
+    timestamp = value
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=UTC)
+    return timestamp.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def _format_summary(summary: RequestSummary, *, include_decider: bool = False) -> str:
+    parts = [
+        f"*{_format_type(summary.workflow_type)}*",
+        f"`#{summary.id}`",
+        _format_status(summary.status),
+        _format_timestamp(summary.created_at),
+    ]
+
+    if include_decider and summary.decided_by:
+        parts.append(f"by <@{summary.decided_by}>")
+
+    return " · ".join(parts)
+
+
+def _build_list_section(title: str, items: Sequence[RequestSummary], *, empty_text: str, include_decider: bool = False) -> dict:
+    if items:
+        lines = "\n".join(f"• {_format_summary(item, include_decider=include_decider)}" for item in items)
+    else:
+        lines = empty_text
+
+    return _section(f"*{title}*\n{lines}")
+
+
+def build_home_view(
+    *,
+    my_requests: Sequence[RequestSummary] | Iterable[RequestSummary],
+    pending_approvals: Sequence[RequestSummary] | Iterable[RequestSummary],
+) -> dict:
+    """Build the Home tab populated with data."""
+
+    my_requests = list(my_requests)
+    pending_approvals = list(pending_approvals)
+
+    blocks = [
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": "Slack Workflow Engine",
+                "emoji": True,
+            },
         },
-    }
-
-    intro_block = _section(
-        "Centralised request workflows in one place. This Home tab will soon show "
-        "your recent requests, pending approvals, and quick actions."
-    )
-
-    placeholders: List[Dict[str, Any]] = [
-        _actionless_section(
+        _section(
+            "Centralised request workflows in one place. Track progress, respond to approvals, "
+            "and access quick actions from this Home tab."
+        ),
+        _divider(),
+        _build_list_section(
             "My Requests",
-            "We'll list your recent submissions here with quick links to each request.",
+            my_requests,
+            empty_text="_No recent requests yet._",
         ),
-        _actionless_section(
+        _divider(),
+        _build_list_section(
             "Pending Approvals",
-            "Requests waiting on you appear in this section so you can respond quickly.",
-        ),
-        _actionless_section(
-            "Shortcuts & Insights",
-            "Fast actions and analytics will be available here in later phases.",
+            pending_approvals,
+            empty_text="_Nothing waiting on you right now._",
+            include_decider=False,
         ),
     ]
 
-    blocks: List[Dict[str, Any]] = [header_block, intro_block, _divider()]
-    for placeholder in placeholders:
-        blocks.extend([placeholder, _divider()])
+    return {"type": "home", "blocks": blocks}
 
-    # Remove the trailing divider to avoid redundant separators at the end.
-    blocks = blocks[:-1]
 
-    return {
-        "type": "home",
-        "blocks": blocks,
-    }
+def build_home_placeholder_view() -> dict:
+    """Fallback placeholder that mirrors the populated layout with empty data."""
+
+    return build_home_view(my_requests=[], pending_approvals=[])
