@@ -865,6 +865,7 @@ from slack_workflow_engine.models import (
 from slack_workflow_engine.logging_config import configure_logging
 from slack_workflow_engine.home import (
     HomeDebouncer,
+    PaginationState,
     build_home_placeholder_view,
     build_home_view,
     list_pending_approvals,
@@ -3160,7 +3161,7 @@ def _handle_app_home_opened(event, client, logger):
                 end_at=request_filters.end_at,
                 sort_by=request_filters.sort_by,
                 sort_order=request_filters.sort_order,
-                limit=request_filters.limit,
+                limit=request_filters.limit + 1,
                 offset=request_filters.offset,
             )
             pending = list_pending_approvals(
@@ -3172,11 +3173,42 @@ def _handle_app_home_opened(event, client, logger):
                 end_at=pending_filters.end_at,
                 sort_by=pending_filters.sort_by,
                 sort_order=pending_filters.sort_order,
-                limit=pending_filters.limit,
+                limit=pending_filters.limit + 1,
                 offset=pending_filters.offset,
             )
 
-        view = build_home_view(my_requests=my_requests, pending_approvals=pending)
+        my_has_more = len(my_requests) > request_filters.limit
+        if my_has_more:
+            my_requests = my_requests[: request_filters.limit]
+
+        pending_has_more = len(pending) > pending_filters.limit
+        if pending_has_more:
+            pending = pending[: pending_filters.limit]
+
+        from slack_workflow_engine.home import PaginationState  # local import to avoid cycle
+
+        my_pagination = PaginationState(
+            offset=request_filters.offset,
+            limit=request_filters.limit,
+            has_previous=request_filters.offset > 0,
+            has_more=my_has_more,
+        )
+
+        pending_pagination = PaginationState(
+            offset=pending_filters.offset,
+            limit=pending_filters.limit,
+            has_previous=pending_filters.offset > 0,
+            has_more=pending_has_more,
+        )
+
+        view = build_home_view(
+            my_requests=my_requests,
+            pending_approvals=pending,
+            my_filters=request_filters,
+            pending_filters=pending_filters,
+            my_pagination=my_pagination,
+            pending_pagination=pending_pagination,
+        )
 
         log.info(
             "app_home_data_prepared",
@@ -7963,9 +7995,6 @@ if __name__ == "__main__":  # pragma: no cover - manual execution helper
 
 
     application.run(host="0.0.0.0", port=3000, debug=True)
-
-
-
 
 
 

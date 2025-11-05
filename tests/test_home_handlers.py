@@ -151,10 +151,15 @@ def test_home_handler_publishes_when_not_debounced(monkeypatch):
     handler(event={"user": "U123"}, client=client, logger=logger)
 
     assert debouncer.calls == ["U123"]
-    assert recent_calls == [(dummy_session, "U123", 5)]
-    assert pending_calls == [(dummy_session, "U123", 7)]
+    assert recent_calls == [(dummy_session, "U123", 6)]
+    assert pending_calls == [(dummy_session, "U123", 8)]
     assert view_calls[0][0] == [SimpleNamespace(id=1)]
     assert view_calls[0][1] == [SimpleNamespace(id=2)]
+    kwargs = view_calls[0][2]
+    assert kwargs["my_filters"].limit == 5
+    assert kwargs["pending_filters"].limit == 7
+    assert kwargs["my_pagination"].has_more is False
+    assert kwargs["pending_pagination"].has_more is False
     assert client.calls == [{"user_id": "U123", "view": {"type": "home", "blocks": []}}]
     assert any(message == "app_home_data_prepared" and kwargs == {"recent_count": 1, "pending_count": 1} for message, kwargs in struct_logger.info_calls)
 
