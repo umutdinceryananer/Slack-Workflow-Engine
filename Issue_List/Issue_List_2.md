@@ -33,7 +33,7 @@ This list translates Part-2 (Home Tab, multi-level approvals, webhooks, RBAC, ob
 - Tests:
   - Query-layer tests for filters/sort/offset pagination; snapshot reflects filter application.
 
-## 4) Home Quick Actions (Approve/Reject) (Partial)
+## 4) Home Quick Actions (Approve/Reject) ✅
 - Description: Enable Approve/Reject directly from Home for eligible approvers.
 - Acceptance Criteria:
   - Blocks include action buttons only for authorized users.
