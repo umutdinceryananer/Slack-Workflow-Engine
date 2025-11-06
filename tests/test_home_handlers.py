@@ -17,6 +17,7 @@ from slack_workflow_engine.home.filters import HomeFilters  # noqa: E402
 class DummyBoltApp:
     def __init__(self) -> None:
         self.events = {}
+        self.actions = {}
 
     def event(self, name):
         def decorator(func):
@@ -25,6 +26,12 @@ class DummyBoltApp:
 
         return decorator
 
+    def action(self, name):
+        def decorator(func):
+            self.actions[name] = func
+            return func
+
+        return decorator
 
 class SpyDebouncer:
     def __init__(self, should_publish: bool) -> None:
@@ -99,7 +106,9 @@ def _register_handler(
 
     bolt_app = DummyBoltApp()
     app_module._register_home_handlers(bolt_app)
-    return bolt_app.events["app_home_opened"]
+    handler = bolt_app.events["app_home_opened"]
+    handler._bolt_app = bolt_app  # type: ignore[attr-defined]
+    return handler
 
 
 def test_home_handler_publishes_when_not_debounced(monkeypatch):
@@ -275,3 +284,81 @@ def test_home_handler_logs_on_slack_error(monkeypatch):
 
     assert any(message == "app_home_publish_failed" for message, _ in struct_logger.error_calls)
     assert any(message == "Failed to publish App Home view" for message, _ in error_logger.error_calls)
+
+
+def test_home_search_action_publishes(monkeypatch):
+    debouncer = SpyDebouncer(should_publish=True)
+
+    dummy_session = object()
+
+    @contextmanager
+    def fake_scope():
+        yield dummy_session
+
+    recent_calls = []
+    pending_calls = []
+
+    def fake_recent(session, *, user_id, limit, query=None, **kwargs):
+        recent_calls.append((session, user_id, limit, query))
+        return [SimpleNamespace(id=11)]
+
+    def fake_pending(session, *, approver_id, limit, query=None, **kwargs):
+        pending_calls.append((session, approver_id, limit, query))
+        return [SimpleNamespace(id=22)]
+
+    def fake_build_view(*, my_requests, pending_approvals, **kwargs):
+        return {
+            "type": "home",
+            "blocks": [my_requests, pending_approvals],
+            "search": kwargs["my_filters"].query,
+        }
+
+    struct_logger = RecordingStructLogger()
+    monkeypatch.setattr(app_module.structlog, "get_logger", lambda: struct_logger)
+
+    handler = _register_handler(
+        monkeypatch,
+        debouncer,
+        session_scope=fake_scope,
+        recent_fn=fake_recent,
+        pending_fn=fake_pending,
+        build_view=fake_build_view,
+        settings=SimpleNamespace(home_recent_limit=5, home_pending_limit=5),
+        filter_results=(
+            HomeFilters(None, None, None, None, "created_at", "desc", 5, 0, "match"),
+            HomeFilters(None, ["PENDING"], None, None, "created_at", "asc", 5, 0, "match"),
+        ),
+    )
+
+    bolt_app = handler._bolt_app  # type: ignore[attr-defined]
+    search_handler = bolt_app.actions[app_module.HOME_SEARCH_ACTION_ID]
+
+    ack_calls = []
+
+    def ack(payload=None):
+        ack_calls.append(payload)
+
+    client = DummyClient()
+    logger = RecordingLogger()
+
+    search_handler(
+        ack=ack,
+        body={"user": {"id": "U123"}, "actions": [{"value": " match "}]},
+        client=client,
+        logger=logger,
+    )
+
+    assert ack_calls == [None]
+    assert client.calls == [
+        {
+            "user_id": "U123",
+            "view": {
+                "type": "home",
+                "blocks": [[SimpleNamespace(id=11)], [SimpleNamespace(id=22)]],
+                "search": "match",
+            },
+        }
+    ]
+    assert recent_calls == [(dummy_session, "U123", 6, "match")]
+    assert pending_calls == [(dummy_session, "U123", 6, "match")]
+    assert any(message == "home_search_performed" for message, _ in struct_logger.info_calls)

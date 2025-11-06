@@ -12,6 +12,8 @@ HOME_REASON_BLOCK_ID = "reason_block"
 HOME_REASON_ACTION_ID = "reason"
 HOME_ATTACHMENT_BLOCK_ID = "attachment_block"
 HOME_ATTACHMENT_ACTION_ID = "attachment_url"
+HOME_SEARCH_BLOCK_ID = "home_search_block"
+HOME_SEARCH_ACTION_ID = "home_search_query"
 
 
 def build_home_decision_modal(

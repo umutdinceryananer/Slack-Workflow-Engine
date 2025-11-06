@@ -5,7 +5,12 @@ from __future__ import annotations
 from datetime import UTC
 from typing import Iterable, Sequence
 
-from .actions import HOME_APPROVE_ACTION_ID, HOME_REJECT_ACTION_ID
+from .actions import (
+    HOME_APPROVE_ACTION_ID,
+    HOME_REJECT_ACTION_ID,
+    HOME_SEARCH_ACTION_ID,
+    HOME_SEARCH_BLOCK_ID,
+)
 from .data import RequestSummary
 from .filters import HomeFilters, PaginationState
 
@@ -83,14 +88,31 @@ def _format_sort_label(sort_by: str, sort_order: str) -> str:
 
 
 def _filters_section(my_filters: HomeFilters, pending_filters: HomeFilters) -> dict:
+    search_text = f"`{my_filters.query}`" if my_filters.query else "_All_"
     summary_lines = [
         "*Filters*",
+        f"*Search*: {search_text}",
         f"*My Requests*: {_format_filter_group('Type', my_filters.workflow_types)} | "
         f"{_format_filter_group('Status', my_filters.statuses)} | {_format_sort_label(my_filters.sort_by, my_filters.sort_order)}",
         f"*Pending Approvals*: {_format_filter_group('Type', pending_filters.workflow_types)} | "
         f"{_format_filter_group('Status', pending_filters.statuses)} | {_format_sort_label(pending_filters.sort_by, pending_filters.sort_order)}",
     ]
     return _section("\n".join(summary_lines))
+
+
+def _search_block(query: str | None) -> dict:
+    return {
+        "type": "input",
+        "block_id": HOME_SEARCH_BLOCK_ID,
+        "dispatch_action": True,
+        "element": {
+            "type": "plain_text_input",
+            "action_id": HOME_SEARCH_ACTION_ID,
+            "placeholder": {"type": "plain_text", "text": "Search by request ID, workflow, or requester"},
+            "initial_value": query or "",
+        },
+        "label": {"type": "plain_text", "text": "Search requests", "emoji": True},
+    }
 
 
 def _pagination_blocks(title: str, prefix: str, pagination: PaginationState) -> list[dict]:
@@ -242,6 +264,7 @@ def build_home_view(
             "Centralised request workflows in one place. Track progress, respond to approvals, "
             "and access quick actions from this Home tab."
         ),
+        _search_block(my_filters.query),
         _divider(),
         _filters_section(my_filters, pending_filters),
         _divider(),

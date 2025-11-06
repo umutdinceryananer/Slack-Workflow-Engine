@@ -19,6 +19,8 @@ from .actions import (
     HOME_REASON_BLOCK_ID,
     HOME_ATTACHMENT_BLOCK_ID,
     build_home_decision_modal,
+    HOME_SEARCH_BLOCK_ID,
+    HOME_SEARCH_ACTION_ID,
 )
 
 __all__ = [
@@ -36,6 +38,8 @@ __all__ = [
     "HOME_DECISION_MODAL_CALLBACK_ID",
     "HOME_REASON_BLOCK_ID",
     "HOME_ATTACHMENT_BLOCK_ID",
+    "HOME_SEARCH_BLOCK_ID",
+    "HOME_SEARCH_ACTION_ID",
     "build_home_decision_modal",
     "build_home_view",
     "build_home_placeholder_view",

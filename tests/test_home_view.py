@@ -13,6 +13,7 @@ from slack_workflow_engine.home import (  # noqa: E402
     build_home_view,
     HOME_APPROVE_ACTION_ID,
     HOME_REJECT_ACTION_ID,
+    HOME_SEARCH_BLOCK_ID,
 )
 from slack_workflow_engine.home.filters import HomeFilters  # noqa: E402
 
@@ -73,24 +74,39 @@ def test_build_home_view_populates_sections() -> None:
     blocks = view["blocks"]
     assert blocks[0]["type"] == "header"
     assert "Track progress" in blocks[1]["text"]["text"]
-    my_section = blocks[5]["text"]["text"]
-    assert "*My Requests*" in my_section
+
+    search_block = next(block for block in blocks if block.get("block_id") == HOME_SEARCH_BLOCK_ID)
+    assert search_block["element"]["initial_value"] == ""
+
+    filters_block = next(block for block in blocks if block["type"] == "section" and block["text"]["text"].startswith("*Filters*"))
+    filters_text = filters_block["text"]["text"]
+    assert "*Search*: _All_" in filters_text
+
+    my_section_block = next(
+        block for block in blocks if block["type"] == "section" and block["text"]["text"].startswith("*My Requests*")
+    )
+    my_section = my_section_block["text"]["text"]
     assert "• *Refund* · `#10` · Pending · 2024-01-01 12:00 UTC" in my_section
     assert "• *Expense*" in my_section
 
-    pending_section = blocks[9]["text"]["text"]
-    assert "*Pending Approvals*" in pending_section
+    pending_section_block = next(
+        block for block in blocks if block["type"] == "section" and block["text"]["text"].startswith("*Pending Approvals*")
+    )
+    pending_section = pending_section_block["text"]["text"]
     assert "• *Refund* · `#20` · Pending" in pending_section
-    status_context = blocks[10]
-    assert status_context["type"] == "context"
+
+    status_context = next(block for block in blocks if block.get("block_id") == "home_pending_status_20")
     status_texts = [element["text"] for element in status_context["elements"] if element["type"] == "mrkdwn"]
     assert any("Status" in text for text in status_texts)
     assert any("Ready for your decision" in text for text in status_texts)
     assert any("Requested by <@U789>" in text for text in status_texts)
-    actions = blocks[11]["elements"]
+
+    actions_block = next(block for block in blocks if block.get("block_id") == "home_pending_actions_20")
+    actions = actions_block["elements"]
     action_ids = {element["action_id"] for element in actions}
     assert HOME_APPROVE_ACTION_ID in action_ids
     assert HOME_REJECT_ACTION_ID in action_ids
+    assert all(not element.get("disabled") for element in actions)
     assert all(not element.get("disabled") for element in actions)
 
 
@@ -99,13 +115,20 @@ def test_placeholder_view_matches_empty_state() -> None:
 
     blocks = view["blocks"]
     assert blocks[0]["type"] == "header"
-    assert blocks[3]["type"] == "section"  # filters summary
-    assert "*Filters*" in blocks[3]["text"]["text"]
-    assert blocks[5]["text"]["text"].startswith("*My Requests*")
-    assert blocks[7]["type"] == "actions"
-    assert blocks[9]["text"]["text"].startswith("*Pending Approvals*")
-    assert blocks[10]["type"] != "actions" or len(blocks[10].get("elements", [])) == 0  # placeholder has no quick actions
-    assert blocks[11]["type"] == "actions"
+    search_block = next(block for block in blocks if block.get("block_id") == HOME_SEARCH_BLOCK_ID)
+    assert search_block["element"]["initial_value"] == ""
+    filters_block = next(block for block in blocks if block["type"] == "section" and block["text"]["text"].startswith("*Filters*"))
+    assert "*Filters*" in filters_block["text"]["text"]
+    my_section_block = next(
+        block for block in blocks if block["type"] == "section" and block["text"]["text"].startswith("*My Requests*")
+    )
+    assert my_section_block["text"]["text"].startswith("*My Requests*")
+    pending_section_block = next(
+        block for block in blocks if block["type"] == "section" and block["text"]["text"].startswith("*Pending Approvals*")
+    )
+    assert pending_section_block["text"]["text"].startswith("*Pending Approvals*")
+    actions_blocks = [block for block in blocks if block.get("block_id", "").startswith("home_pending_actions_")]
+    assert all(not block.get("elements") for block in actions_blocks)
 
 
 def test_home_view_disables_actions_for_completed_items() -> None:

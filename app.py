@@ -687,6 +687,8 @@ from slack_workflow_engine.home import (
     HOME_DECISION_MODAL_CALLBACK_ID,
     HOME_REASON_BLOCK_ID,
     HOME_ATTACHMENT_BLOCK_ID,
+    HOME_SEARCH_ACTION_ID,
+    HOME_SEARCH_BLOCK_ID,
     build_home_placeholder_view,
     build_home_view,
     build_home_decision_modal,
@@ -1402,12 +1404,13 @@ HOME_DEBOUNCER = HomeDebouncer()
 
 
 
-def _compute_home_filters(settings: AppSettings):
+def _compute_home_filters(settings: AppSettings, *, query: str | None = None):
     request_filters = normalise_filters(
         sort_by="created_at",
         sort_order="desc",
         limit=settings.home_recent_limit,
         default_limit=settings.home_recent_limit,
+        query=query,
     )
     pending_filters = normalise_filters(
         statuses=("PENDING",),
@@ -1415,6 +1418,7 @@ def _compute_home_filters(settings: AppSettings):
         sort_order="asc",
         limit=settings.home_pending_limit,
         default_limit=settings.home_pending_limit,
+        query=query,
     )
     return request_filters, pending_filters
 
@@ -3231,6 +3235,11 @@ def _handle_request_command(ack, command, client, logger):
         unbind_contextvars("trace_id")
 
 def _register_home_handlers(bolt_app: SlackApp) -> None:
+
+    @bolt_app.action(HOME_SEARCH_ACTION_ID)
+    def handle_home_search(ack, body, client, logger):
+
+        _handle_home_search_action(ack=ack, body=body, client=client, logger=logger)
 
     @bolt_app.event("app_home_opened")
     def handle_app_home(event, client, logger):
@@ -5248,6 +5257,96 @@ def _handle_home_approve_action(ack, body, client, logger):
 def _handle_home_reject_action(ack, body, client, logger):
 
     _handle_home_action("REJECTED", ack, body, client, logger)
+
+
+def _handle_home_search_action(ack, body, client, logger):
+
+    trace_id = str(uuid4())
+
+    bind_contextvars(trace_id=trace_id)
+
+    log = structlog.get_logger().bind(trace_id=trace_id)
+
+    try:
+
+        actions = body.get("actions") or []
+
+        if not actions:
+
+            ack(
+                {
+                    "response_action": "errors",
+                    "errors": {
+                        HOME_SEARCH_BLOCK_ID: "Enter a search term to continue.",
+                    },
+                }
+            )
+
+            log.warning("home_search_missing_payload")
+
+            return
+
+        action_payload = actions[0]
+
+        raw_query = action_payload.get("value", "")
+
+        query = raw_query.strip() if isinstance(raw_query, str) else ""
+
+        user_id = body.get("user", {}).get("id")
+
+        if not user_id:
+
+            ack(
+                {
+                    "response_action": "errors",
+                    "errors": {
+                        HOME_SEARCH_BLOCK_ID: "We could not identify the acting user.",
+                    },
+                }
+            )
+
+            log.warning("home_search_missing_user")
+
+            return
+
+        ack()
+
+        settings = get_settings()
+
+        request_filters, pending_filters = _compute_home_filters(settings, query=query or None)
+
+        view, recent_count, pending_count = _prepare_home_view(
+            user_id=user_id,
+            request_filters=request_filters,
+            pending_filters=pending_filters,
+        )
+
+        HOME_DEBOUNCER.clear(user_id)
+
+        log.info(
+            "home_search_performed",
+            user_id=user_id,
+            query=query or None,
+            recent_count=recent_count,
+            pending_count=pending_count,
+        )
+
+        client.views_publish(user_id=user_id, view=view)
+
+    except SlackApiError as exc:
+
+        error_code = exc.response.get("error") if getattr(exc, "response", None) else str(exc)
+
+        log.error("home_search_publish_failed", error=error_code)
+
+        logger.error(
+            "Failed to publish App Home search view",
+            extra={"user_id": body.get("user", {}).get("id"), "error": error_code},
+        )
+
+    finally:
+
+        unbind_contextvars("trace_id")
 
 
 def _handle_home_decision_submission(ack, body, client, logger):
@@ -8475,10 +8574,6 @@ if __name__ == "__main__":  # pragma: no cover - manual execution helper
 
 
     application.run(host="0.0.0.0", port=3000, debug=True)
-
-
-
-
 
 
 
