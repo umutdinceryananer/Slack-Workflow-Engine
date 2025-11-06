@@ -275,8 +275,8 @@ def build_home_view(
 
 def build_home_placeholder_view() -> dict:
     """Fallback placeholder that mirrors the populated layout with empty data."""
-    default_filters = HomeFilters(None, None, None, None, "created_at", "desc", 10, 0)
-    pending_filters = HomeFilters(None, ["PENDING"], None, None, "created_at", "asc", 10, 0)
+    default_filters = HomeFilters(None, None, None, None, "created_at", "desc", 10, 0, None)
+    pending_filters = HomeFilters(None, ["PENDING"], None, None, "created_at", "asc", 10, 0, None)
     default_pagination = PaginationState()
     return build_home_view(
         my_requests=[],

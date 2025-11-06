@@ -140,8 +140,8 @@ def test_home_handler_publishes_when_not_debounced(monkeypatch):
         build_view=fake_build_view,
         settings=SimpleNamespace(home_recent_limit=5, home_pending_limit=7),
         filter_results=(
-            HomeFilters(None, None, None, None, "created_at", "desc", 5, 0),
-            HomeFilters(None, ["PENDING"], None, None, "created_at", "asc", 7, 0),
+            HomeFilters(None, None, None, None, "created_at", "desc", 5, 0, None),
+            HomeFilters(None, ["PENDING"], None, None, "created_at", "asc", 7, 0, None),
         ),
     )
 
@@ -183,7 +183,7 @@ def test_home_handler_skips_publish_when_debounced(monkeypatch):
         pending_fn=fail,
         build_view=fail,
         settings=None,
-        filter_results=(HomeFilters(None, None, None, None, "created_at", "desc", 10, 0),),
+        filter_results=(HomeFilters(None, None, None, None, "created_at", "desc", 10, 0, None),),
     )
 
     client = DummyClient()
@@ -217,8 +217,8 @@ def test_home_handler_handles_empty_data(monkeypatch):
         },
         settings=SimpleNamespace(home_recent_limit=3, home_pending_limit=3),
         filter_results=(
-            HomeFilters(None, None, None, None, "created_at", "desc", 3, 0),
-            HomeFilters(None, ["PENDING"], None, None, "created_at", "asc", 3, 0),
+            HomeFilters(None, None, None, None, "created_at", "desc", 3, 0, None),
+            HomeFilters(None, ["PENDING"], None, None, "created_at", "asc", 3, 0, None),
         ),
     )
 
@@ -251,8 +251,8 @@ def test_home_handler_logs_on_slack_error(monkeypatch):
         build_view=lambda **_: {"type": "home", "blocks": []},
         settings=SimpleNamespace(home_recent_limit=5, home_pending_limit=5),
         filter_results=(
-            HomeFilters(None, None, None, None, "created_at", "desc", 5, 0),
-            HomeFilters(None, ["PENDING"], None, None, "created_at", "asc", 5, 0),
+            HomeFilters(None, None, None, None, "created_at", "desc", 5, 0, None),
+            HomeFilters(None, ["PENDING"], None, None, "created_at", "asc", 5, 0, None),
         ),
     )
 

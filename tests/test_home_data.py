@@ -202,3 +202,39 @@ def test_list_pending_approvals_supports_sort_and_offset():
 
     assert len(results) == 2
     assert [summary.workflow_type for summary in results] == ["pto", "expense"]
+
+
+def test_list_recent_requests_filters_by_query():
+    base = datetime(2024, 7, 1, tzinfo=UTC)
+    factory = get_session_factory()
+
+    with factory() as session:
+        _add_request(session, seq=1, workflow_type="refund", created_by="U123", created_at=base - timedelta(minutes=3))
+        _add_request(session, seq=2, workflow_type="expense", created_by="U123", created_at=base - timedelta(minutes=2))
+        _add_request(session, seq=3, workflow_type="expense", created_by="U999", created_at=base - timedelta(minutes=1))
+        session.commit()
+
+    with factory() as session:
+        results = list_recent_requests(session, user_id="U123", query="expense")
+
+    assert [summary.workflow_type for summary in results] == ["expense"]
+    assert all(summary.created_by == "U123" for summary in results)
+
+
+def test_list_pending_approvals_filters_by_query():
+    base = datetime(2024, 8, 1, tzinfo=UTC)
+    factory = get_session_factory()
+
+    with factory() as session:
+        _add_request(session, seq=1, workflow_type="refund", created_by="U600", created_at=base)
+        _add_request(session, seq=2, workflow_type="expense", created_by="U777", created_at=base + timedelta(minutes=1))
+        _add_request(session, seq=3, workflow_type="expense", created_by="U777", created_at=base + timedelta(minutes=2), status="APPROVED")
+        session.commit()
+
+    with factory() as session:
+        results = list_pending_approvals(session, approver_id="UAPP", query="U777")
+
+    assert len(results) == 1
+    summary = results[0]
+    assert summary.workflow_type == "expense"
+    assert summary.created_by == "U777"

@@ -50,6 +50,7 @@ def test_normalise_filters_parses_sequences_and_dates():
         limit="25",
         offset="2",
         default_limit=10,
+        query="  invoice  ",
     )
 
     assert isinstance(filters, HomeFilters)
@@ -61,6 +62,7 @@ def test_normalise_filters_parses_sequences_and_dates():
     assert filters.sort_order == "asc"
     assert filters.limit == 25
     assert filters.offset == 2
+    assert filters.query == "invoice"
 
 
 def test_normalise_filters_defaults_when_invalid():
@@ -76,3 +78,4 @@ def test_normalise_filters_defaults_when_invalid():
     assert filters.sort_order == "desc"
     assert filters.limit == 7
     assert filters.offset == 0
+    assert filters.query is None

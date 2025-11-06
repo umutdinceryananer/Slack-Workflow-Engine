@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Iterable, List, Literal, Sequence
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, select, or_
 from sqlalchemy.orm import Session
 
 from slack_workflow_engine.models import Request
@@ -91,6 +91,23 @@ def _apply_sort(statement: Select, *, sort_by: str, sort_order: Literal["asc", "
     return statement.order_by(clause)
 
 
+def _apply_query(statement: Select, *, query: str | None) -> Select:
+    if not query:
+        return statement
+
+    term = f"%{query}%"
+    clauses = [
+        Request.type.ilike(term),
+        Request.created_by.ilike(term),
+        Request.payload_json.ilike(term),
+    ]
+
+    if query.isdigit():
+        clauses.append(Request.id == int(query))
+
+    return statement.where(or_(*clauses))
+
+
 def list_recent_requests(
     session: Session,
     *,
@@ -103,6 +120,7 @@ def list_recent_requests(
     end_at: datetime | None = None,
     sort_by: Literal["created_at", "status", "type"] = "created_at",
     sort_order: Literal["asc", "desc"] = "desc",
+    query: str | None = None,
 ) -> List[RequestSummary]:
     """Return requests created by *user_id* applying optional filters."""
 
@@ -119,6 +137,7 @@ def list_recent_requests(
     )
 
     statement = _apply_sort(statement, sort_by=sort_by, sort_order=sort_order)
+    statement = _apply_query(statement, query=query)
     statement = statement.offset(max(offset, 0)).limit(limit)
 
     return _to_summaries(session, statement)
@@ -136,6 +155,7 @@ def list_pending_approvals(
     end_at: datetime | None = None,
     sort_by: Literal["created_at", "status", "type"] = "created_at",
     sort_order: Literal["asc", "desc"] = "asc",
+    query: str | None = None,
 ) -> List[RequestSummary]:
     """Return requests awaiting the attention of *approver_id* with filters."""
 
@@ -153,6 +173,7 @@ def list_pending_approvals(
     )
 
     statement = _apply_sort(statement, sort_by=sort_by, sort_order=sort_order)
+    statement = _apply_query(statement, query=query)
     statement = statement.offset(max(offset, 0)).limit(limit)
 
     return _to_summaries(session, statement)

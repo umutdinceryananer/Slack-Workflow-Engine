@@ -48,6 +48,13 @@ def _parse_datetime(value: str | datetime | None) -> datetime | None:
     return parsed.astimezone(UTC)
 
 
+def _clean_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
 @dataclass(frozen=True)
 class HomeFilters:
     workflow_types: list[str] | None
@@ -58,6 +65,7 @@ class HomeFilters:
     sort_order: str
     limit: int
     offset: int
+    query: str | None
 
 
 @dataclass(frozen=True)
@@ -117,6 +125,7 @@ def normalise_filters(
     limit: int | None = None,
     offset: int | None = None,
     default_limit: int = 10,
+    query: str | None = None,
 ) -> HomeFilters:
     return HomeFilters(
         workflow_types=_clean_sequence(workflow_types),
@@ -127,4 +136,5 @@ def normalise_filters(
         sort_order=validate_sort_order(sort_order, default="asc" if sort_by == "type" else "desc"),
         limit=clamp_limit(limit, default=default_limit),
         offset=clamp_offset(offset),
+        query=_clean_text(query),
     )

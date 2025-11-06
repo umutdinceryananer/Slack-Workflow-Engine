@@ -55,8 +55,8 @@ def test_build_home_view_populates_sections() -> None:
         )
     ]
 
-    my_filters = HomeFilters(["refund", "expense"], ["PENDING"], None, None, "created_at", "desc", 10, 0)
-    pending_filters = HomeFilters(["refund"], ["PENDING"], None, None, "created_at", "asc", 10, 0)
+    my_filters = HomeFilters(["refund", "expense"], ["PENDING"], None, None, "created_at", "desc", 10, 0, None)
+    pending_filters = HomeFilters(["refund"], ["PENDING"], None, None, "created_at", "asc", 10, 0, None)
     my_pag = PaginationState(offset=0, limit=10, has_previous=False, has_more=True)
     pending_pag = PaginationState(offset=0, limit=10, has_previous=False, has_more=False)
 
@@ -133,7 +133,7 @@ def test_home_view_disables_actions_for_completed_items() -> None:
         ),
     ]
 
-    filters = HomeFilters(["refund"], ["PENDING"], None, None, "created_at", "asc", 10, 0)
+    filters = HomeFilters(["refund"], ["PENDING"], None, None, "created_at", "asc", 10, 0, None)
     pagination = PaginationState(offset=0, limit=10, has_previous=False, has_more=False)
 
     view = build_home_view(

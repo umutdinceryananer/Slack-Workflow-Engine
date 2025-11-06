@@ -1433,6 +1433,7 @@ def _prepare_home_view(*, user_id: str | None, request_filters, pending_filters)
             sort_order=request_filters.sort_order,
             limit=request_filters.limit + 1,
             offset=request_filters.offset,
+            query=request_filters.query,
         )
         pending = list_pending_approvals(
             session,
@@ -1445,6 +1446,7 @@ def _prepare_home_view(*, user_id: str | None, request_filters, pending_filters)
             sort_order=pending_filters.sort_order,
             limit=pending_filters.limit + 1,
             offset=pending_filters.offset,
+            query=pending_filters.query,
         )
 
     my_has_more = len(my_requests) > request_filters.limit
@@ -8473,7 +8475,6 @@ if __name__ == "__main__":  # pragma: no cover - manual execution helper
 
 
     application.run(host="0.0.0.0", port=3000, debug=True)
-
 
 
 
