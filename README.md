@@ -88,6 +88,7 @@ Central, configuration-driven Slack workflow bot. A single Slack app handles mul
    - Approving or rejecting updates the database and edits the Slack message. Unauthorized users receive an ephemeral warning.
    - Open the bot’s App Home (Slack → Messages → App → Home) to review “My Requests” and “Pending Approvals”. Entries appear after you submit/approve, and rapid refreshes are debounced for rate-limit safety. Use the pagination buttons and filter summary to explore larger datasets.
    - Trigger an approval from App Home: click the “Approve” or “Reject” quick action, supply any optional approval note (Reject requires a reason) and, if relevant, paste an attachment URL. Submitting disables the buttons, updates the channel message, and automatically refreshes App Home for both the approver and the original requester.
+   - Try the search field (“Search requests”): type part of a workflow name (e.g. `refund`), requester, or request ID. The Home view filters both sections immediately; clearing the field resets the lists.
 
 9. **Run automated tests**
    ```bash
@@ -132,6 +133,9 @@ Central, configuration-driven Slack workflow bot. A single Slack app handles mul
 
 **Can I approve or reject from the App Home tab?**
 - Yes. Pending approvals show quick action buttons only to eligible approvers. Clicking “Approve” or “Reject” opens a confirmation modal: approvals let you add an optional note, while rejections require a reason. You can also attach an optional evidence URL. When you submit, the channel message is updated, the buttons become disabled, and the App Home view is refreshed for both the approver and the request owner.
+
+**Search doesn’t return anything even though I see the request in Slack**
+- The Home search looks at request ID, workflow type, requester, and the raw payload. Try searching by the numeric ID (`123`), a workflow keyword (e.g. `refund`), or the Slack user ID that created the request. Clear the search box to reset the lists.
 
 **Approvers click Approve/Reject twice and nothing happens**
 - The first click decides the request; subsequent clicks return an ephemeral notice (“This request has already been decided.”). The channel message is not updated again.

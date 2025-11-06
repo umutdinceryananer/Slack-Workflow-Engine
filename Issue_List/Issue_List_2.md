@@ -50,6 +50,10 @@ This list translates Part-2 (Home Tab, multi-level approvals, webhooks, RBAC, ob
   - Text search across request id/title/fields.
 - Tests:
   - Search index function tests; filter application reflected in Home snapshot.
+- Manual verification:
+  - Open App Home, enter a workflow keyword (e.g. `refund`) in the search field, and confirm both sections filter to matching requests.
+  - Search by requester (Slack user ID) and numeric request ID to confirm all supported dimensions work.
+  - Clear the search box to reset results, then trigger an Approve/Reject quick action and verify the view refreshes with the search term reapplied.
 
 ## 6) Config Schema Extension for Multi-level Approvals
 - Description: Extend workflow config to support `approvers.strategy` (sequential/parallel) and `approvers.levels`.
