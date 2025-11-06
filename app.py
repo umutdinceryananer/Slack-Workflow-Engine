@@ -1402,6 +1402,153 @@ HOME_DEBOUNCER = HomeDebouncer()
 
 
 
+def _compute_home_filters(settings: AppSettings):
+    request_filters = normalise_filters(
+        sort_by="created_at",
+        sort_order="desc",
+        limit=settings.home_recent_limit,
+        default_limit=settings.home_recent_limit,
+    )
+    pending_filters = normalise_filters(
+        statuses=("PENDING",),
+        sort_by="created_at",
+        sort_order="asc",
+        limit=settings.home_pending_limit,
+        default_limit=settings.home_pending_limit,
+    )
+    return request_filters, pending_filters
+
+
+
+def _prepare_home_view(*, user_id: str | None, request_filters, pending_filters):
+    with session_scope() as session:
+        my_requests = list_recent_requests(
+            session,
+            user_id=user_id or "",
+            workflow_types=request_filters.workflow_types,
+            statuses=request_filters.statuses,
+            start_at=request_filters.start_at,
+            end_at=request_filters.end_at,
+            sort_by=request_filters.sort_by,
+            sort_order=request_filters.sort_order,
+            limit=request_filters.limit + 1,
+            offset=request_filters.offset,
+        )
+        pending = list_pending_approvals(
+            session,
+            approver_id=user_id or "",
+            workflow_types=pending_filters.workflow_types,
+            statuses=pending_filters.statuses,
+            start_at=pending_filters.start_at,
+            end_at=pending_filters.end_at,
+            sort_by=pending_filters.sort_by,
+            sort_order=pending_filters.sort_order,
+            limit=pending_filters.limit + 1,
+            offset=pending_filters.offset,
+        )
+
+    my_has_more = len(my_requests) > request_filters.limit
+    if my_has_more:
+        my_requests = my_requests[: request_filters.limit]
+
+    pending_has_more = len(pending) > pending_filters.limit
+    if pending_has_more:
+        pending = pending[: pending_filters.limit]
+
+    my_pagination = PaginationState(
+        offset=request_filters.offset,
+        limit=request_filters.limit,
+        has_previous=request_filters.offset > 0,
+        has_more=my_has_more,
+    )
+
+    pending_pagination = PaginationState(
+        offset=pending_filters.offset,
+        limit=pending_filters.limit,
+        has_previous=pending_filters.offset > 0,
+        has_more=pending_has_more,
+    )
+
+    view = build_home_view(
+        my_requests=my_requests,
+        pending_approvals=pending,
+        my_filters=request_filters,
+        pending_filters=pending_filters,
+        my_pagination=my_pagination,
+        pending_pagination=pending_pagination,
+    )
+
+    return view, len(my_requests), len(pending)
+
+
+
+def _refresh_home_tabs(*, client, user_ids, logger, trace_id: str | None = None):
+    if not user_ids:
+        return
+
+    settings = get_settings()
+    request_filters, pending_filters = _compute_home_filters(settings)
+    log = structlog.get_logger()
+    if trace_id:
+        log = log.bind(trace_id=trace_id)
+    seen: set[str] = set()
+
+    for user_id in user_ids:
+        if not user_id or user_id in seen:
+            continue
+
+        seen.add(user_id)
+        HOME_DEBOUNCER.clear(user_id)
+
+        try:
+            view, recent_count, pending_count = _prepare_home_view(
+                user_id=user_id,
+                request_filters=request_filters,
+                pending_filters=pending_filters,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to prepare App Home view during refresh",
+                extra={"user_id": user_id},
+            )
+            continue
+
+        try:
+            client.views_publish(user_id=user_id, view=view)
+        except SlackApiError as exc:
+            error_code = exc.response.get("error") if getattr(exc, "response", None) else str(exc)
+            log.warning("home_refresh_failed", user_id=user_id, error=error_code)
+            logger.warning(
+                "Failed to publish App Home view during refresh",
+                extra={"user_id": user_id, "error": error_code},
+            )
+            continue
+
+        log.info(
+            "home_refresh_published",
+            user_id=user_id,
+            recent_count=recent_count,
+            pending_count=pending_count,
+        )
+
+
+def _schedule_home_refresh(*, client, logger, user_ids, trace_id: str | None = None) -> None:
+    targets = [user_id for user_id in set(user_ids) if user_id]
+    if not targets:
+        return
+
+    run_async(
+        _refresh_home_tabs,
+        client=client,
+        user_ids=targets,
+        logger=logger,
+        trace_id=trace_id,
+    )
+
+
+
+
+
 
 
 
@@ -2957,88 +3104,15 @@ def _handle_app_home_opened(event, client, logger):
             return
 
         settings = get_settings()
+        request_filters, pending_filters = _compute_home_filters(settings)
 
-        request_filters = normalise_filters(
-            sort_by="created_at",
-            sort_order="desc",
-            limit=settings.home_recent_limit,
-            default_limit=settings.home_recent_limit,
-        )
-
-        pending_filters = normalise_filters(
-            statuses=("PENDING",),
-            sort_by="created_at",
-            sort_order="asc",
-            limit=settings.home_pending_limit,
-            default_limit=settings.home_pending_limit,
-        )
-
-        attachment_url = _extract_attachment_url(body)
-
-        with session_scope() as session:
-            my_requests = list_recent_requests(
-                session,
-                user_id=user_id,
-                workflow_types=request_filters.workflow_types,
-                statuses=request_filters.statuses,
-                start_at=request_filters.start_at,
-                end_at=request_filters.end_at,
-                sort_by=request_filters.sort_by,
-                sort_order=request_filters.sort_order,
-                limit=request_filters.limit + 1,
-                offset=request_filters.offset,
-            )
-            pending = list_pending_approvals(
-                session,
-                approver_id=user_id,
-                workflow_types=pending_filters.workflow_types,
-                statuses=pending_filters.statuses,
-                start_at=pending_filters.start_at,
-                end_at=pending_filters.end_at,
-                sort_by=pending_filters.sort_by,
-                sort_order=pending_filters.sort_order,
-                limit=pending_filters.limit + 1,
-                offset=pending_filters.offset,
-            )
-
-        my_has_more = len(my_requests) > request_filters.limit
-        if my_has_more:
-            my_requests = my_requests[: request_filters.limit]
-
-        pending_has_more = len(pending) > pending_filters.limit
-        if pending_has_more:
-            pending = pending[: pending_filters.limit]
-
-        from slack_workflow_engine.home import PaginationState  # local import to avoid cycle
-
-        my_pagination = PaginationState(
-            offset=request_filters.offset,
-            limit=request_filters.limit,
-            has_previous=request_filters.offset > 0,
-            has_more=my_has_more,
-        )
-
-        pending_pagination = PaginationState(
-            offset=pending_filters.offset,
-            limit=pending_filters.limit,
-            has_previous=pending_filters.offset > 0,
-            has_more=pending_has_more,
-        )
-
-        view = build_home_view(
-            my_requests=my_requests,
-            pending_approvals=pending,
-            my_filters=request_filters,
+        view, recent_count, pending_count = _prepare_home_view(
+            user_id=user_id,
+            request_filters=request_filters,
             pending_filters=pending_filters,
-            my_pagination=my_pagination,
-            pending_pagination=pending_pagination,
         )
 
-        log.info(
-            "app_home_data_prepared",
-            recent_count=len(my_requests),
-            pending_count=len(pending),
-        )
+        log.info("app_home_data_prepared", recent_count=recent_count, pending_count=pending_count)
 
         client.views_publish(user_id=user_id, view=view)
 
@@ -4552,6 +4626,10 @@ def _handle_approve_action(ack, body, client, logger):
 
         ts = ""
 
+        attachment_url = _extract_attachment_url(body)
+
+        request_owner = ""
+
         with session_scope() as session:
 
             request = session.get(Request, context.request_id)
@@ -4613,6 +4691,8 @@ def _handle_approve_action(ack, body, client, logger):
             channel_id = message.channel_id
 
             ts = message.ts
+
+            request_owner = request.created_by
 
             log = log.bind(message_channel=channel_id)
 
@@ -4724,6 +4804,13 @@ def _handle_approve_action(ack, body, client, logger):
         attachment_url=attachment_url,
         trace_id=trace_id,
     )
+
+        _schedule_home_refresh(
+            client=client,
+            logger=logger,
+            user_ids={user_id, request_owner},
+            trace_id=trace_id,
+        )
     finally:
 
         unbind_contextvars("trace_id")
@@ -4817,6 +4904,8 @@ def _handle_reject_action(ack, body, client, logger):
         reason = _extract_action_reason(body)
         attachment_url = _extract_attachment_url(body)
 
+        request_owner = ""
+
         with session_scope() as session:
 
             request = session.get(Request, context.request_id)
@@ -4878,6 +4967,8 @@ def _handle_reject_action(ack, body, client, logger):
             channel_id = message.channel_id
 
             ts = message.ts
+
+            request_owner = request.created_by
 
             log = log.bind(message_channel=channel_id)
 
@@ -4990,6 +5081,13 @@ def _handle_reject_action(ack, body, client, logger):
         attachment_url=attachment_url,
         trace_id=trace_id,
     )
+
+        _schedule_home_refresh(
+            client=client,
+            logger=logger,
+            user_ids={user_id, request_owner},
+            trace_id=trace_id,
+        )
     finally:
 
         unbind_contextvars("trace_id")
@@ -5245,6 +5343,8 @@ def _handle_home_decision_submission(ack, body, client, logger):
 
         ts = ""
 
+        request_owner = ""
+
         with session_scope() as session:
 
             request = session.get(Request, request_id)
@@ -5296,6 +5396,8 @@ def _handle_home_decision_submission(ack, body, client, logger):
             channel_id = message.channel_id
 
             ts = message.ts
+
+            request_owner = request.created_by
 
             try:
 
@@ -5399,6 +5501,13 @@ def _handle_home_decision_submission(ack, body, client, logger):
             logger=logger,
             reason=reason,
             attachment_url=attachment_url,
+            trace_id=trace_id,
+        )
+
+        _schedule_home_refresh(
+            client=client,
+            logger=logger,
+            user_ids={user_id, request_owner},
             trace_id=trace_id,
         )
 
@@ -8364,9 +8473,6 @@ if __name__ == "__main__":  # pragma: no cover - manual execution helper
 
 
     application.run(host="0.0.0.0", port=3000, debug=True)
-
-
-
 
 
 

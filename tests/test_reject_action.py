@@ -54,6 +54,7 @@ class DummySlackWebClient:
     def __init__(self):
         self.update_calls = []
         self.ephemeral_calls = []
+        self.publish_calls = []
 
     def chat_update(self, **kwargs):
         self.update_calls.append(kwargs)
@@ -61,6 +62,10 @@ class DummySlackWebClient:
 
     def chat_postEphemeral(self, **kwargs):
         self.ephemeral_calls.append(kwargs)
+        return {"ok": True}
+
+    def views_publish(self, **kwargs):
+        self.publish_calls.append(kwargs)
         return {"ok": True}
 
 def _run_async_sync(func, /, *args, **kwargs):
@@ -118,6 +123,8 @@ def test_handle_reject_action_authorized(monkeypatch, logger):
     assert ack_payloads == [{"response_type": "ephemeral", "text": "Request rejected."}]
     assert slack_client.update_calls
     assert "Out of policy" in json.dumps(slack_client.update_calls[-1]["blocks"])
+    publish_targets = {call["user_id"] for call in slack_client.publish_calls}
+    assert publish_targets == {"U2", "U9"}
 
     factory = get_session_factory()
     with factory() as session:
@@ -154,6 +161,7 @@ def test_handle_reject_action_unauthorized(monkeypatch, logger):
 
     assert ack_payloads == [None]
     assert not slack_client.update_calls
+    assert not slack_client.publish_calls
     assert slack_client.ephemeral_calls == [
         {"channel": "CREFUND", "user": "U999", "text": "You are not authorized to reject this request."}
     ]
@@ -204,6 +212,7 @@ def test_handle_reject_action_self_guard(monkeypatch, logger):
 
     assert ack_payloads == [None]
     assert not slack_client.update_calls
+    assert not slack_client.publish_calls
     assert slack_client.ephemeral_calls == [
         {"channel": "CSELF", "user": "U9", "text": "You cannot reject your own request."}
     ]
@@ -249,6 +258,8 @@ def test_handle_reject_action_duplicate_click(monkeypatch, logger):
         "user": "U2",
         "text": "This request has already been decided.",
     }
+    publish_targets = {call["user_id"] for call in slack_client.publish_calls}
+    assert publish_targets == {"U2", "U9"}
 
     factory = get_session_factory()
     with factory() as session:

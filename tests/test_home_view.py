@@ -81,10 +81,17 @@ def test_build_home_view_populates_sections() -> None:
     pending_section = blocks[9]["text"]["text"]
     assert "*Pending Approvals*" in pending_section
     assert "• *Refund* · `#20` · Pending" in pending_section
-    actions = blocks[10]["elements"]
+    status_context = blocks[10]
+    assert status_context["type"] == "context"
+    status_texts = [element["text"] for element in status_context["elements"] if element["type"] == "mrkdwn"]
+    assert any("Status" in text for text in status_texts)
+    assert any("Ready for your decision" in text for text in status_texts)
+    assert any("Requested by <@U789>" in text for text in status_texts)
+    actions = blocks[11]["elements"]
     action_ids = {element["action_id"] for element in actions}
     assert HOME_APPROVE_ACTION_ID in action_ids
     assert HOME_REJECT_ACTION_ID in action_ids
+    assert all(not element.get("disabled") for element in actions)
 
 
 def test_placeholder_view_matches_empty_state() -> None:
@@ -99,3 +106,53 @@ def test_placeholder_view_matches_empty_state() -> None:
     assert blocks[9]["text"]["text"].startswith("*Pending Approvals*")
     assert blocks[10]["type"] != "actions" or len(blocks[10].get("elements", [])) == 0  # placeholder has no quick actions
     assert blocks[11]["type"] == "actions"
+
+
+def test_home_view_disables_actions_for_completed_items() -> None:
+    base = datetime(2024, 1, 5, 9, 0, tzinfo=UTC)
+    pending = [
+        RequestSummary(
+            id=30,
+            workflow_type="refund",
+            status="PENDING",
+            created_by="UPENDING",
+            created_at=base,
+            payload_json="{}",
+            decided_by=None,
+            decided_at=None,
+        ),
+        RequestSummary(
+            id=31,
+            workflow_type="refund",
+            status="APPROVED",
+            created_by="UREQUEST",
+            created_at=base,
+            payload_json="{}",
+            decided_by="U333",
+            decided_at=base.replace(hour=10),
+        ),
+    ]
+
+    filters = HomeFilters(["refund"], ["PENDING"], None, None, "created_at", "asc", 10, 0)
+    pagination = PaginationState(offset=0, limit=10, has_previous=False, has_more=False)
+
+    view = build_home_view(
+        my_requests=[],
+        pending_approvals=pending,
+        my_filters=filters,
+        pending_filters=filters,
+        my_pagination=pagination,
+        pending_pagination=pagination,
+    )
+
+    blocks_by_id = {block.get("block_id"): block for block in view["blocks"] if block.get("block_id")}
+    active_actions = blocks_by_id[f"home_pending_actions_{pending[0].id}"]["elements"]
+    assert all(not element.get("disabled") for element in active_actions)
+
+    completed_actions = blocks_by_id[f"home_pending_actions_{pending[1].id}"]["elements"]
+    assert all(element.get("disabled") for element in completed_actions)
+
+    status_block = blocks_by_id[f"home_pending_status_{pending[1].id}"]
+    status_texts = [element["text"] for element in status_block["elements"] if element["type"] == "mrkdwn"]
+    assert any("Decided by <@U333>" in text for text in status_texts)
+    assert any("Requested by <@UREQUEST>" in text for text in status_texts)

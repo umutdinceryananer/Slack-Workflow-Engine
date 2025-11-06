@@ -59,6 +59,7 @@ class DummySlackClient:
     def __init__(self):
         self.post_calls = []
         self.update_calls = []
+        self.publish_calls = []
 
     def chat_postMessage(self, **kwargs):
         self.post_calls.append(kwargs)
@@ -71,6 +72,10 @@ class DummySlackClient:
 
     def chat_update(self, **kwargs):
         self.update_calls.append(kwargs)
+        return {"ok": True}
+
+    def views_publish(self, **kwargs):
+        self.publish_calls.append(kwargs)
         return {"ok": True}
 
 
@@ -139,6 +144,8 @@ def test_submit_and_approve_flow(monkeypatch):
 
     assert ack_calls == [{"response_type": "ephemeral", "text": "Request approved."}]
     assert slack_client.update_calls
+    publish_targets = {call["user_id"] for call in slack_client.publish_calls}
+    assert publish_targets == {"U1", "U123"}
 
     with factory() as session:
         refreshed = session.get(Request, request.id)
@@ -219,6 +226,8 @@ def test_submit_and_reject_flow(monkeypatch):
 
     assert ack_calls == [{"response_type": "ephemeral", "text": "Request rejected."}]
     assert slack_client.update_calls
+    publish_targets = {call["user_id"] for call in slack_client.publish_calls}
+    assert publish_targets == {"U2", "U123"}
     reason_payload = json.dumps(slack_client.update_calls[-1]["blocks"])
     assert "Budget exceeded" in reason_payload
 

@@ -19,6 +19,7 @@ class DummyClient:
     def __init__(self):
         self.open_calls: list[dict] = []
         self.update_calls: list[dict] = []
+        self.publish_calls: list[dict] = []
 
     def views_open(self, **kwargs):
         self.open_calls.append(kwargs)
@@ -26,6 +27,10 @@ class DummyClient:
 
     def chat_update(self, **kwargs):
         self.update_calls.append(kwargs)
+        return {"ok": True}
+
+    def views_publish(self, **kwargs):
+        self.publish_calls.append(kwargs)
         return {"ok": True}
 
 
@@ -155,6 +160,7 @@ def test_home_approve_allows_authorized_user(monkeypatch):
     payload = json.loads(metadata)
     assert payload["request_id"] == request_id
     assert payload["decision"] == "APPROVED"
+    assert client.publish_calls == []
 
 
 def test_home_approve_blocks_unauthorized_user(monkeypatch):
@@ -182,6 +188,7 @@ def test_home_approve_blocks_unauthorized_user(monkeypatch):
     assert not client.open_calls
     errors = ack_payloads[0]["errors"]
     assert any("not authorized" in message.lower() for message in errors.values())
+    assert client.publish_calls == []
 
 
 def test_home_approve_blocks_decided_request(monkeypatch):
@@ -206,6 +213,7 @@ def test_home_approve_blocks_decided_request(monkeypatch):
     assert not client.open_calls
     errors = ack_payloads[0]["errors"]
     assert any("already been decided" in message.lower() for message in errors.values())
+    assert client.publish_calls == []
 
 
 def _sync_run_async(func, /, *args, **kwargs):
@@ -245,6 +253,8 @@ def test_home_decision_submission_approves_request_and_records(monkeypatch):
 
     assert ack_payloads == [{"response_action": "clear"}]
     assert client.update_calls
+    publish_targets = {call["user_id"] for call in client.publish_calls}
+    assert publish_targets == {"UAPP", "UCREATOR"}
 
     factory = get_session_factory()
     with factory() as session:
@@ -287,6 +297,7 @@ def test_home_decision_submission_requires_reason_for_reject(monkeypatch):
     assert ack_payloads
     errors = ack_payloads[0]["errors"]
     assert HOME_REASON_BLOCK_ID in errors
+    assert client.publish_calls == []
 
     factory = get_session_factory()
     with factory() as session:
@@ -325,6 +336,7 @@ def test_home_decision_submission_validates_attachment_url(monkeypatch):
     assert ack_payloads
     errors = ack_payloads[0]["errors"]
     assert HOME_ATTACHMENT_BLOCK_ID in errors
+    assert client.publish_calls == []
 
     factory = get_session_factory()
     with factory() as session:
@@ -365,6 +377,7 @@ def test_home_decision_submission_blocks_unauthorized_user(monkeypatch):
     assert ack_payloads
     errors = ack_payloads[0]["errors"]
     assert "authorized" in " ".join(errors.values()).lower()
+    assert client.publish_calls == []
 
     factory = get_session_factory()
     with factory() as session:

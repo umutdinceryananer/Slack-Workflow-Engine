@@ -146,6 +146,38 @@ def _decision_payload(summary: RequestSummary) -> str:
 def _pending_action_blocks(pending: Sequence[RequestSummary]) -> list[dict]:
     blocks: list[dict] = []
     for summary in pending:
+        status_label = _format_status(summary.status)
+        status_elements = [
+            {
+                "type": "mrkdwn",
+                "text": f"*Status:* {status_label}",
+            }
+        ]
+        if summary.status == "PENDING":
+            status_elements.append(
+                {
+                    "type": "mrkdwn",
+                    "text": "Ready for your decision.",
+                }
+            )
+        elif summary.decided_by:
+            status_elements.append(
+                {
+                    "type": "mrkdwn",
+                    "text": f"Decided by <@{summary.decided_by}>.",
+                }
+            )
+        status_elements.append({"type": "mrkdwn", "text": f"Requested by <@{summary.created_by}>."})
+
+        blocks.append(
+            {
+                "type": "context",
+                "block_id": f"home_pending_status_{summary.id}",
+                "elements": status_elements,
+            }
+        )
+
+        actionable = summary.status == "PENDING"
         blocks.append(
             {
                 "type": "actions",
@@ -164,10 +196,22 @@ def _pending_action_blocks(pending: Sequence[RequestSummary]) -> list[dict]:
                         "style": "danger",
                         "action_id": HOME_REJECT_ACTION_ID,
                         "value": _decision_payload(summary),
+                        "confirm": {
+                            "title": {"type": "plain_text", "text": "Reject request"},
+                            "text": {
+                                "type": "mrkdwn",
+                                "text": "Are you sure you want to reject this request?",
+                            },
+                            "confirm": {"type": "plain_text", "text": "Reject"},
+                            "deny": {"type": "plain_text", "text": "Cancel"},
+                        },
                     },
                 ],
             }
         )
+        if not actionable:
+            for element in blocks[-1]["elements"]:
+                element["disabled"] = True
     return blocks
 
 
