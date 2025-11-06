@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import List
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, update
-from sqlalchemy.orm import Mapped, mapped_column, relationship, Session
+from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
 from slack_workflow_engine.db import Base
 
@@ -30,6 +31,11 @@ class Request(Base):
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     message: Mapped["Message"] = relationship("Message", back_populates="request", uselist=False, cascade="all, delete")
+    approvals: Mapped[List["ApprovalDecision"]] = relationship(
+        "ApprovalDecision",
+        back_populates="request",
+        cascade="all, delete-orphan",
+    )
 
 
 class Message(Base):
@@ -47,6 +53,23 @@ class Message(Base):
     thread_ts: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     request: Mapped[Request] = relationship("Request", back_populates="message")
+
+
+class ApprovalDecision(Base):
+    """Stores a decision taken on a workflow request."""
+
+    __tablename__ = "approvals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    request_id: Mapped[int] = mapped_column(ForeignKey("requests.id", ondelete="CASCADE"), nullable=False, unique=True)
+    decision: Mapped[str] = mapped_column(String(32), nullable=False)
+    decided_by: Mapped[str] = mapped_column(String(32), nullable=False)
+    decided_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attachment_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    source: Mapped[str] = mapped_column(String(16), nullable=False, default="channel")
+
+    request: Mapped[Request] = relationship("Request", back_populates="approvals")
 
 
 class StatusTransitionError(Exception):

@@ -97,6 +97,7 @@ def update_request_message(
     ts: str,
     logger,
     reason: str | None = None,
+    attachment_url: str | None = None,
     trace_id: str | None = None,
 ) -> None:
     """Update an existing Slack message to reflect the latest decision."""
@@ -114,6 +115,7 @@ def update_request_message(
         decision=decision,
         decided_by=decided_by,
         reason=reason,
+        attachment_url=attachment_url,
     )
 
     try:

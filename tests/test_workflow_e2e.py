@@ -13,7 +13,7 @@ if str(ROOT) not in sys.path:
 import app as app_module  # noqa: E402
 from slack_workflow_engine import config  # noqa: E402
 from slack_workflow_engine.db import Base, get_engine, get_session_factory  # noqa: E402
-from slack_workflow_engine.models import Message, Request  # noqa: E402
+from slack_workflow_engine.models import ApprovalDecision, Message, Request  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -144,6 +144,10 @@ def test_submit_and_approve_flow(monkeypatch):
         refreshed = session.get(Request, request.id)
         assert refreshed.status == "APPROVED"
         assert refreshed.decided_by == "U1"
+        approval = session.query(ApprovalDecision).filter_by(request_id=request.id).one()
+        assert approval.decision == "APPROVED"
+        assert approval.reason is None
+        assert approval.source == "channel"
 
 
 def test_submit_and_reject_flow(monkeypatch):
@@ -222,3 +226,7 @@ def test_submit_and_reject_flow(monkeypatch):
         refreshed = session.get(Request, request.id)
         assert refreshed.status == "REJECTED"
         assert refreshed.decided_by == "U2"
+        approval = session.query(ApprovalDecision).filter_by(request_id=request.id).one()
+        assert approval.decision == "REJECTED"
+        assert approval.reason == "Budget exceeded"
+        assert approval.source == "channel"

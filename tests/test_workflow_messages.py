@@ -88,6 +88,8 @@ def test_build_request_decision_update_replaces_buttons(workflow_definition):
 def test_build_request_decision_update_includes_reason(workflow_definition):
     submission = {"order_id": "D-100"}
 
+
+
     updated = build_request_decision_update(
         definition=workflow_definition,
         submission=submission,
@@ -100,3 +102,21 @@ def test_build_request_decision_update_includes_reason(workflow_definition):
     reason_block = updated["blocks"][-1]
     assert reason_block["type"] == "section"
     assert "Missing receipt" in reason_block["text"]["text"]
+
+
+
+def test_build_request_decision_update_includes_attachment_url(workflow_definition):
+    submission = {"order_id": "E-500"}
+
+    updated = build_request_decision_update(
+        definition=workflow_definition,
+        submission=submission,
+        request_id=6,
+        decision="APPROVED",
+        decided_by="U42",
+        attachment_url="https://example.com/receipt.pdf",
+    )
+
+    attachment_block = updated["blocks"][-1]
+    assert attachment_block["type"] == "section"
+    assert "https://example.com/receipt.pdf" in attachment_block["text"]["text"]

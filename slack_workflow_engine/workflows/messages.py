@@ -125,6 +125,7 @@ def build_request_decision_update(
     decision: str,
     decided_by: str,
     reason: str | None = None,
+    attachment_url: str | None = None,
 ) -> Dict[str, Any]:
     """Return an updated Slack message payload after a decision."""
 
@@ -155,6 +156,17 @@ def build_request_decision_update(
                 "text": {
                     "type": "mrkdwn",
                     "text": f"*Reason:* {reason}",
+                },
+            }
+        )
+
+    if attachment_url:
+        blocks.append(
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*Attachment:* <{attachment_url}|View attachment>",
                 },
             }
         )

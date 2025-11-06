@@ -13,7 +13,7 @@ if str(ROOT) not in sys.path:
 import app as app_module  # noqa: E402
 from slack_workflow_engine import config  # noqa: E402
 from slack_workflow_engine.db import Base, get_engine, get_session_factory  # noqa: E402
-from slack_workflow_engine.models import Request  # noqa: E402
+from slack_workflow_engine.models import ApprovalDecision, Request  # noqa: E402
 from slack_workflow_engine.workflows.requests import canonical_json  # noqa: E402
 from slack_workflow_engine.workflows.storage import (
     save_message_reference,
@@ -117,6 +117,10 @@ def test_handle_approve_action_authorized(monkeypatch, logger):
         refreshed = session.get(Request, request.id)
         assert refreshed.status == "APPROVED"
         assert refreshed.decided_by == "U123"
+        approval = session.query(ApprovalDecision).filter_by(request_id=request.id).one()
+        assert approval.decision == "APPROVED"
+        assert approval.reason is None
+        assert approval.source == "channel"
 
 
 def test_handle_approve_action_unauthorized(monkeypatch, logger):
@@ -151,6 +155,7 @@ def test_handle_approve_action_unauthorized(monkeypatch, logger):
     with factory() as session:
         refreshed = session.get(Request, request.id)
         assert refreshed.status == "PENDING"
+        assert session.query(ApprovalDecision).count() == 0
 
 
 def test_handle_approve_action_self_guard(monkeypatch, logger):
@@ -200,6 +205,7 @@ def test_handle_approve_action_self_guard(monkeypatch, logger):
     with factory() as session:
         refreshed = session.get(Request, request.id)
         assert refreshed.status == "PENDING"
+        assert session.query(ApprovalDecision).count() == 0
 
 
 def test_handle_approve_action_duplicate_click(monkeypatch, logger):
@@ -235,3 +241,8 @@ def test_handle_approve_action_duplicate_click(monkeypatch, logger):
         "user": "U123",
         "text": "This request has already been decided.",
     }
+
+    factory = get_session_factory()
+    with factory() as session:
+        approvals = session.query(ApprovalDecision).filter_by(request_id=request.id).all()
+        assert len(approvals) == 1

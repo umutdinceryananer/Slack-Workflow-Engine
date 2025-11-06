@@ -191,7 +191,8 @@ from pathlib import Path
 
 
 from uuid import uuid4
-
+from datetime import UTC, datetime
+from urllib.parse import urlparse
 
 
 
@@ -639,197 +640,12 @@ from slack_workflow_engine.db import session_scope
 
 
 from slack_workflow_engine.models import (
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     Request,
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     StatusTransitionError,
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     OptimisticLockError,
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     DuplicateRequestError,
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    ApprovalDecision,
     advance_request_status,
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 )
 
 
@@ -868,8 +684,12 @@ from slack_workflow_engine.home import (
     PaginationState,
     HOME_APPROVE_ACTION_ID,
     HOME_REJECT_ACTION_ID,
+    HOME_DECISION_MODAL_CALLBACK_ID,
+    HOME_REASON_BLOCK_ID,
+    HOME_ATTACHMENT_BLOCK_ID,
     build_home_placeholder_view,
     build_home_view,
+    build_home_decision_modal,
     list_pending_approvals,
     list_recent_requests,
     normalise_filters,
@@ -3153,6 +2973,8 @@ def _handle_app_home_opened(event, client, logger):
             default_limit=settings.home_pending_limit,
         )
 
+        attachment_url = _extract_attachment_url(body)
+
         with session_scope() as session:
             my_requests = list_recent_requests(
                 session,
@@ -3845,6 +3667,12 @@ def _register_view_handlers(bolt_app: SlackApp) -> None:
 
         _handle_view_submission(ack=ack, body=body, client=client, logger=logger)
 
+    @bolt_app.view(HOME_DECISION_MODAL_CALLBACK_ID)
+
+    def handle_home_decision_modal(ack, body, client, logger):
+
+        _handle_home_decision_submission(ack=ack, body=body, client=client, logger=logger)
+
 
 
 
@@ -4454,6 +4282,97 @@ def _extract_action_reason(body: dict) -> str | None:
     return None
 
 
+def _extract_attachment_url(body: dict) -> str | None:
+
+    values = body.get("state", {}).get("values", {})
+
+    block = values.get(HOME_ATTACHMENT_BLOCK_ID)
+
+    if not isinstance(block, dict):
+
+        return None
+
+    for control in block.values():
+
+        if not isinstance(control, dict):
+
+            continue
+
+        value = control.get("value")
+
+        if isinstance(value, str):
+
+            trimmed = value.strip()
+
+            if trimmed:
+
+                return trimmed
+
+    return None
+
+
+def _validate_attachment_url(url: str | None) -> bool:
+
+    if not url:
+
+        return True
+
+    parsed = urlparse(url)
+
+    if parsed.scheme not in ("http", "https"):
+
+        return False
+
+    if not parsed.netloc:
+
+        return False
+
+    return True
+
+
+def _record_approval_decision(
+    session,
+    *,
+    request: Request,
+    decision: str,
+    decided_by: str,
+    reason: str | None,
+    attachment_url: str | None,
+    source: str,
+) -> None:
+
+    cleaned_reason = (reason or "").strip() or None
+
+    cleaned_attachment = (attachment_url or "").strip() or None
+
+    decided_at = request.decided_at or datetime.now(UTC)
+
+    existing = request.approvals[0] if request.approvals else None
+
+    if existing is None:
+
+        session.add(
+            ApprovalDecision(
+                request_id=request.id,
+                decision=decision,
+                decided_by=decided_by,
+                decided_at=decided_at,
+                reason=cleaned_reason,
+                attachment_url=cleaned_attachment,
+                source=source,
+            )
+        )
+
+        return
+
+    existing.decision = decision
+    existing.decided_by = decided_by
+    existing.decided_at = decided_at
+    existing.reason = cleaned_reason
+    existing.attachment_url = cleaned_attachment
+    existing.source = source
+
+
 
 
 
@@ -4713,6 +4632,16 @@ def _handle_approve_action(ack, body, client, logger):
 
                 )
 
+                _record_approval_decision(
+                    session,
+                    request=request,
+                    decision="APPROVED",
+                    decided_by=user_id,
+                    reason=None,
+                    attachment_url=attachment_url,
+                    source="channel",
+                )
+
             except StatusTransitionError:
 
                 ack()
@@ -4792,6 +4721,7 @@ def _handle_approve_action(ack, body, client, logger):
         channel_id=channel_id,
         ts=ts,
         logger=logger,
+        attachment_url=attachment_url,
         trace_id=trace_id,
     )
     finally:
@@ -4885,6 +4815,7 @@ def _handle_reject_action(ack, body, client, logger):
         ts = ""
 
         reason = _extract_action_reason(body)
+        attachment_url = _extract_attachment_url(body)
 
         with session_scope() as session:
 
@@ -4964,6 +4895,16 @@ def _handle_reject_action(ack, body, client, logger):
 
                     decided_by=user_id,
 
+                )
+
+                _record_approval_decision(
+                    session,
+                    request=request,
+                    decision="REJECTED",
+                    decided_by=user_id,
+                    reason=reason,
+                    attachment_url=attachment_url,
+                    source="channel",
                 )
 
             except StatusTransitionError:
@@ -5046,6 +4987,7 @@ def _handle_reject_action(ack, body, client, logger):
         ts=ts,
         logger=logger,
         reason=reason,
+        attachment_url=attachment_url,
         trace_id=trace_id,
     )
     finally:
@@ -5161,9 +5103,37 @@ def _handle_home_action(decision: str, ack, body, client, logger):
 
                 return
 
+        trigger_id = body.get("trigger_id")
+
+        if not trigger_id:
+
+            _ack_home_error(ack, block_id, "We could not open a confirmation modal. Please try again.")
+
+            log.warning("home_action_missing_trigger", user_id=user_id)
+
+            return
+
+        modal_view = build_home_decision_modal(
+            decision=decision,
+            request_id=context.request_id,
+            workflow_type=context.workflow_type,
+        )
+
         ack()
 
-        log.info("home_action_validated", decision=decision, user_id=user_id)
+        try:
+
+            client.views_open(trigger_id=trigger_id, view=modal_view)
+
+        except SlackApiError as exc:
+
+            error_code = exc.response.get("error") if getattr(exc, "response", None) else str(exc)
+
+            log.error("home_decision_modal_open_failed", error=error_code)
+
+            return
+
+        log.info("home_decision_modal_opened", decision=decision, user_id=user_id)
 
     finally:
 
@@ -5178,6 +5148,264 @@ def _handle_home_approve_action(ack, body, client, logger):
 def _handle_home_reject_action(ack, body, client, logger):
 
     _handle_home_action("REJECTED", ack, body, client, logger)
+
+
+def _handle_home_decision_submission(ack, body, client, logger):
+
+    trace_id = str(uuid4())
+
+    bind_contextvars(trace_id=trace_id)
+
+    log = structlog.get_logger().bind(trace_id=trace_id)
+
+    try:
+
+        view = body.get("view", {})
+
+        metadata_raw = view.get("private_metadata", "{}")
+
+        try:
+
+            metadata = json.loads(metadata_raw)
+
+        except json.JSONDecodeError:
+
+            ack({"response_action": "errors", "errors": {"general": "Decision metadata is invalid."}})
+
+            log.warning("home_decision_invalid_metadata")
+
+            return
+
+        decision = str(metadata.get("decision", "")).upper()
+
+        request_id = metadata.get("request_id")
+
+        workflow_type = metadata.get("workflow_type")
+
+        log = log.bind(request_id=request_id, workflow_type=workflow_type, decision=decision)
+
+        if decision not in {"APPROVED", "REJECTED"} or not request_id or not workflow_type:
+
+            ack({"response_action": "errors", "errors": {"general": "Decision metadata is incomplete. Please try again."}})
+
+            log.warning("home_decision_missing_metadata")
+
+            return
+
+        user_id = body.get("user", {}).get("id")
+
+        if not user_id:
+
+            ack({"response_action": "errors", "errors": {"general": "We could not identify the acting user."}})
+
+            log.warning("home_decision_missing_user")
+
+            return
+
+        settings = get_settings()
+
+        if not is_user_authorized(user_id, settings.approver_user_ids):
+
+            ack({"response_action": "errors", "errors": {"general": "You are not authorized to take action on this request."}})
+
+            log.warning("unauthorized_home_submission", user_id=user_id)
+
+            return
+
+        state_wrapper = {"state": {"values": view.get("state", {}).get("values", {})}}
+
+        reason = _extract_action_reason(state_wrapper)
+
+        attachment_url = _extract_attachment_url(state_wrapper)
+
+        if decision == "REJECTED" and not reason:
+
+            ack({"response_action": "errors", "errors": {HOME_REASON_BLOCK_ID: "Please provide a rejection reason."}})
+
+            log.info("home_decision_missing_reason", user_id=user_id)
+
+            return
+
+        if attachment_url and not _validate_attachment_url(attachment_url):
+
+            ack(
+                {
+                    "response_action": "errors",
+                    "errors": {HOME_ATTACHMENT_BLOCK_ID: "Enter a valid URL starting with http or https."},
+                }
+            )
+
+            log.info("home_decision_invalid_attachment", user_id=user_id)
+
+            return
+
+        submission_payload = ""
+
+        channel_id = ""
+
+        ts = ""
+
+        with session_scope() as session:
+
+            request = session.get(Request, request_id)
+
+            if request is None:
+
+                ack({"response_action": "errors", "errors": {"general": "Request could not be found."}})
+
+                log.warning("home_decision_request_missing", user_id=user_id)
+
+                return
+
+            if request.type != workflow_type:
+
+                ack({"response_action": "errors", "errors": {"general": "Workflow type mismatch for this request."}})
+
+                log.warning("home_decision_type_mismatch", request_type=request.type)
+
+                return
+
+            if request.created_by == user_id:
+
+                ack({"response_action": "errors", "errors": {"general": "You cannot decide on your own request."}})
+
+                log.info("home_decision_self_blocked", user_id=user_id)
+
+                return
+
+            if request.status != "PENDING":
+
+                ack({"response_action": "errors", "errors": {"general": "This request has already been decided."}})
+
+                log.info("home_decision_already_recorded", request_status=request.status)
+
+                return
+
+            message = request.message
+
+            if message is None:
+
+                ack({"response_action": "errors", "errors": {"general": "Request message is not yet available."}})
+
+                log.warning("home_decision_message_missing")
+
+                return
+
+            submission_payload = request.payload_json
+
+            channel_id = message.channel_id
+
+            ts = message.ts
+
+            try:
+
+                advance_request_status(
+
+                    session,
+
+                    request,
+
+                    new_status=decision,
+
+                    decided_by=user_id,
+
+                )
+
+            except StatusTransitionError:
+
+                ack({"response_action": "errors", "errors": {"general": "This request has already been decided."}})
+
+                log.info("home_decision_status_transition_conflict", request_status=request.status)
+
+                return
+
+            except OptimisticLockError:
+
+                ack(
+                    {
+                        "response_action": "errors",
+                        "errors": {"general": "Request was updated concurrently. Please try again."},
+                    }
+                )
+
+                log.warning("home_decision_optimistic_lock_failed")
+
+                return
+
+            _record_approval_decision(
+
+                session,
+
+                request=request,
+
+                decision=decision,
+
+                decided_by=user_id,
+
+                reason=reason,
+
+                attachment_url=attachment_url,
+
+                source="home",
+
+            )
+
+        ack({"response_action": "clear"})
+
+        log.info("home_decision_recorded", user_id=user_id)
+
+        try:
+
+            definition = load_workflow_or_raise(workflow_type)
+
+        except (FileNotFoundError, ValidationError):
+
+            logger.exception(
+
+                "Unable to load workflow definition during home decision",
+
+                extra={"workflow_type": workflow_type},
+
+            )
+
+            return
+
+        try:
+
+            submission = json.loads(submission_payload) if submission_payload else {}
+
+        except json.JSONDecodeError:
+
+            logger.exception(
+
+                "Stored payload_json is invalid JSON",
+
+                extra={"request_id": request_id},
+
+            )
+
+            submission = {}
+
+        run_async(
+            update_request_message,
+            client=client,
+            definition=definition,
+            submission=submission,
+            request_id=request_id,
+            decision=decision,
+            decided_by=user_id,
+            channel_id=channel_id,
+            ts=ts,
+            logger=logger,
+            reason=reason,
+            attachment_url=attachment_url,
+            trace_id=trace_id,
+        )
+
+    finally:
+
+        unbind_contextvars("trace_id")
+
 
 def _register_action_handlers(bolt_app: SlackApp) -> None:
 
@@ -8136,10 +8364,6 @@ if __name__ == "__main__":  # pragma: no cover - manual execution helper
 
 
     application.run(host="0.0.0.0", port=3000, debug=True)
-
-
-
-
 
 
 
