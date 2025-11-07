@@ -134,6 +134,19 @@ Central, configuration-driven Slack workflow bot. A single Slack app handles mul
 **Can I approve or reject from the App Home tab?**
 - Yes. Pending approvals show quick action buttons only to eligible approvers. Clicking “Approve” or “Reject” opens a confirmation modal: approvals let you add an optional note, while rejections require a reason. You can also attach an optional evidence URL. When you submit, the channel message is updated, the buttons become disabled, and the App Home view is refreshed for both the approver and the request owner.
 
+**How do multi-level or parallel approvals work?**
+- Workflow configs support `approvers.strategy` (`sequential` or `parallel`) and explicit `levels`. Each inner list represents one approval stage; sequential workflows advance level by level, while parallel workflows require everyone in the current level to approve. Update your `workflows/*.json` to include the strategy and levels, for example:
+  ```json
+  "approvers": {
+    "strategy": "sequential",
+    "levels": [
+      ["UAPP_L1_PRIMARY", "UAPP_L1_BACKUP"],
+      ["UAPP_L2_REVIEWER"]
+    ]
+  }
+  ```
+  Legacy configs that listed approvers as a flat array still load—they’re treated as a single sequential level.
+
 **Search doesn’t return anything even though I see the request in Slack**
 - The Home search looks at request ID, workflow type, requester, and the raw payload. Try searching by the numeric ID (`123`), a workflow keyword (e.g. `refund`), or the Slack user ID that created the request. Clear the search box to reset the lists.
 
