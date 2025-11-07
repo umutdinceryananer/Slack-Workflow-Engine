@@ -44,7 +44,7 @@ This list translates Part-2 (Home Tab, multi-level approvals, webhooks, RBAC, ob
   - Authorized vs unauthorized action tests; snapshot after decision shows updated state.
   - Reason requirement enforced for Reject; optional attachment accepted and persisted.
 
-## 5) Home Search
+## 5) Home Search ✅
 - Description: Quick text search.
 - Acceptance Criteria:
   - Text search across request id/title/fields.
@@ -62,6 +62,17 @@ This list translates Part-2 (Home Tab, multi-level approvals, webhooks, RBAC, ob
   - Example config added/updated for refund.
 - Tests:
   - Valid/invalid config samples; schema rejects malformed levels.
+
+### Manual E2E checklist (run after Issue 5 & 6)
+1. **Seed data** – submit a `/request refund` so at least one request waits on each level defined in `workflows/refund.json`.
+2. **Search behaviour** – open App Home and:
+   - Enter a workflow keyword (e.g. `refund`) and confirm both “My Requests” and “Pending Approvals” filter.
+   - Search by requester Slack ID and by numeric request ID to ensure all supported dimensions return matches.
+   - Clear the search box; verify pagination and counts reset.
+3. **Level‑1 approval from Home** – as an L1 approver, click “Approve”, add an optional note, submit, and confirm the channel message + Home tab refresh with disabled buttons (search query persists if set).
+4. **Level‑2 approval** – switch to an L2 approver, approve again, and check that final status is shown in Slack and the Home tab refreshes.
+5. **Reject path** – repeat with “Reject”, ensuring the modal enforces a reason, optional attachment is stored, and Home status context shows who rejected.
+6. **Config sanity** – spot‑check `workflows/refund.json` (strategy/levels) to ensure it mirrors the scenario you executed.
 
 ## 7) State Machine: Levels + Quorum (N-of-M) + Tie-breaker
 - Description: Add level-based states (e.g., `PENDING_L1`, `PENDING_L2`) and parallel quorum rules.
