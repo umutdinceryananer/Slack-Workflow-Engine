@@ -8,7 +8,10 @@
   ],
   "approvers": {
     "strategy": "sequential",
-    "levels": [["U09PY3D5ASK"]]
+    "levels": [
+      ["UAPP_L1_PRIMARY", "UAPP_L1_BACKUP"],
+      ["UAPP_L2_REVIEWER"]
+    ]
   },
   "notify_channel": "C09QA3GA5RB"
 }
