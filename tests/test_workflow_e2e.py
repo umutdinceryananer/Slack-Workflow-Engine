@@ -42,10 +42,12 @@ def configure_environment(monkeypatch, tmp_path):
     get_engine.cache_clear()
     get_session_factory.cache_clear()
 
-    monkeypatch.setattr(app_module, "WORKFLOW_DEFINITION_DIR", workflows_dir)
+    from slack_workflow_engine import workflows as workflow_pkg
     from slack_workflow_engine.workflows import commands as workflow_commands
     from slack_workflow_engine.workflows import loader as workflow_loader
 
+    monkeypatch.setattr(app_module, "WORKFLOW_DEFINITION_DIR", workflows_dir)
+    monkeypatch.setattr(workflow_pkg, "WORKFLOW_DEFINITION_DIR", workflows_dir)
     monkeypatch.setattr(workflow_commands, "WORKFLOW_DEFINITION_DIR", workflows_dir)
     workflow_loader.load_workflow_definition.cache_clear()
 

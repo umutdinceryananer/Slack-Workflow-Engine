@@ -4565,6 +4565,7 @@ def _apply_level_decision(
 
     level_decisions = _load_level_decisions(session, request_id=request.id, level=level_index)
     runtime_after = compute_level_runtime(definition=definition, status=request.status, decisions=level_decisions)
+    awaiting_tie_after = runtime_after.awaiting_tie_breaker
 
     final_decision: str | None = None
     include_actions = True
@@ -4572,7 +4573,7 @@ def _apply_level_decision(
     quorum = runtime_after.quorum or len(level_def.members)
 
     if decision == "REJECTED":
-        if tie_breaker_acting or not awaiting_tie:
+        if tie_breaker_acting or not awaiting_tie_after:
             final_decision = "REJECTED"
             include_actions = False
     elif tie_breaker_acting and decision == "APPROVED":
@@ -8589,6 +8590,5 @@ if __name__ == "__main__":  # pragma: no cover - manual execution helper
 
 
     application.run(host="0.0.0.0", port=3000, debug=True)
-
 
 
