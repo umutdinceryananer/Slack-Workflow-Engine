@@ -1,5 +1,6 @@
 """Tests for database schema creation."""
 
+from datetime import UTC, datetime
 from pathlib import Path
 import sys
 from types import SimpleNamespace
@@ -13,7 +14,7 @@ if str(ROOT) not in sys.path:
 
 from slack_workflow_engine import Base, config
 from slack_workflow_engine.db import get_engine, get_session_factory
-from slack_workflow_engine.models import Message, Request
+from slack_workflow_engine.models import ApprovalDecision, Message, Request, StatusHistory
 
 
 @pytest.fixture(autouse=True)
@@ -40,9 +41,17 @@ def test_create_all_creates_expected_tables():
     tables = inspector.get_table_names()
     assert "requests" in tables
     assert "messages" in tables
+    assert "approvals" in tables
+    assert "status_history" in tables
 
-    columns = {column["name"] for column in inspector.get_columns("requests")}
-    assert columns.issuperset({"type", "payload_json", "request_key"})
+    request_columns = {column["name"] for column in inspector.get_columns("requests")}
+    assert request_columns.issuperset({"type", "payload_json", "request_key"})
+
+    approvals_columns = {column["name"] for column in inspector.get_columns("approvals")}
+    assert approvals_columns.issuperset({"request_id", "level", "decision", "decided_by"})
+
+    history_columns = {column["name"] for column in inspector.get_columns("status_history")}
+    assert history_columns.issuperset({"request_id", "from_status", "to_status", "changed_by"})
 
     with engine.begin() as connection:
         connection.execute(
@@ -61,6 +70,27 @@ def test_create_all_creates_expected_tables():
                 "request_id": 1,
                 "channel_id": "C1",
                 "ts": "123.456",
+            },
+        )
+        connection.execute(
+            ApprovalDecision.__table__.insert(),
+            {
+                "request_id": 1,
+                "level": 1,
+                "decision": "PENDING",
+                "decided_by": "U1",
+                "decided_at": datetime.now(UTC),
+                "source": "seed",
+            },
+        )
+        connection.execute(
+            StatusHistory.__table__.insert(),
+            {
+                "request_id": 1,
+                "from_status": "PENDING",
+                "to_status": "PENDING",
+                "changed_at": datetime.now(UTC),
+                "changed_by": "system",
             },
         )
         rows = connection.execute(Request.__table__.select()).fetchall()

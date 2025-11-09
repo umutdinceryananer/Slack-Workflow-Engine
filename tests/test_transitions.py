@@ -15,6 +15,7 @@ from slack_workflow_engine.db import Base, get_engine, get_session_factory
 from slack_workflow_engine.models import (
     OptimisticLockError,
     Request,
+    StatusHistory,
     StatusTransitionError,
     advance_request_status,
 )
@@ -76,6 +77,12 @@ def test_valid_transition_advances_status(session, persisted_request):
     assert updated.status == "APPROVED"
     assert updated.version == 2
     assert updated.decided_by == "U2"
+
+    history_entries = session.query(StatusHistory).filter_by(request_id=persisted_request.id).all()
+    assert len(history_entries) == 1
+    assert history_entries[0].from_status == "PENDING"
+    assert history_entries[0].to_status == "APPROVED"
+    assert history_entries[0].changed_by == "U2"
 
 
 def test_invalid_transition_raises_error(session, persisted_request):

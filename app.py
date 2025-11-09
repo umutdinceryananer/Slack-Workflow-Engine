@@ -4424,6 +4424,7 @@ def _record_approval_decision(
     reason: str | None,
     attachment_url: str | None,
     source: str,
+    level: int = 1,
 ) -> None:
 
     cleaned_reason = (reason or "").strip() or None
@@ -4439,6 +4440,7 @@ def _record_approval_decision(
         session.add(
             ApprovalDecision(
                 request_id=request.id,
+                level=level,
                 decision=decision,
                 decided_by=decided_by,
                 decided_at=decided_at,
@@ -4451,6 +4453,7 @@ def _record_approval_decision(
         return
 
     existing.decision = decision
+    existing.level = level
     existing.decided_by = decided_by
     existing.decided_at = decided_at
     existing.reason = cleaned_reason
@@ -8574,7 +8577,6 @@ if __name__ == "__main__":  # pragma: no cover - manual execution helper
 
 
     application.run(host="0.0.0.0", port=3000, debug=True)
-
 
 
 

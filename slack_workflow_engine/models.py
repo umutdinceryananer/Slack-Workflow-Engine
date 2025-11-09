@@ -36,6 +36,12 @@ class Request(Base):
         back_populates="request",
         cascade="all, delete-orphan",
     )
+    status_history: Mapped[List["StatusHistory"]] = relationship(
+        "StatusHistory",
+        back_populates="request",
+        cascade="all, delete-orphan",
+        order_by="StatusHistory.changed_at",
+    )
 
 
 class Message(Base):
@@ -61,7 +67,8 @@ class ApprovalDecision(Base):
     __tablename__ = "approvals"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    request_id: Mapped[int] = mapped_column(ForeignKey("requests.id", ondelete="CASCADE"), nullable=False, unique=True)
+    request_id: Mapped[int] = mapped_column(ForeignKey("requests.id", ondelete="CASCADE"), nullable=False)
+    level: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     decision: Mapped[str] = mapped_column(String(32), nullable=False)
     decided_by: Mapped[str] = mapped_column(String(32), nullable=False)
     decided_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
@@ -70,6 +77,21 @@ class ApprovalDecision(Base):
     source: Mapped[str] = mapped_column(String(16), nullable=False, default="channel")
 
     request: Mapped[Request] = relationship("Request", back_populates="approvals")
+
+
+class StatusHistory(Base):
+    """Audit log of request status transitions."""
+
+    __tablename__ = "status_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    request_id: Mapped[int] = mapped_column(ForeignKey("requests.id", ondelete="CASCADE"), nullable=False)
+    from_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    to_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+    changed_by: Mapped[str] = mapped_column(String(32), nullable=False)
+
+    request: Mapped[Request] = relationship("Request", back_populates="status_history")
 
 
 class StatusTransitionError(Exception):
@@ -102,9 +124,10 @@ def advance_request_status(
     """Attempt to update request status with optimistic locking."""
 
     decided_time = decided_at or datetime.now(UTC)
-    allowed = _ALLOWED_TRANSITIONS.get(request.status, set())
+    previous_status = request.status
+    allowed = _ALLOWED_TRANSITIONS.get(previous_status, set())
     if new_status not in allowed:
-        raise StatusTransitionError(f"Cannot transition from {request.status} to {new_status}")
+        raise StatusTransitionError(f"Cannot transition from {previous_status} to {new_status}")
 
     stmt = (
         update(Request)
@@ -123,4 +146,15 @@ def advance_request_status(
         raise OptimisticLockError(f"Request {request.id} was updated concurrently")
 
     session.refresh(request)
+
+    session.add(
+        StatusHistory(
+            request_id=request.id,
+            from_status=previous_status,
+            to_status=new_status,
+            changed_at=decided_time,
+            changed_by=decided_by,
+        )
+    )
+
     return request
