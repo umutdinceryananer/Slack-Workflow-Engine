@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC
 from typing import Iterable, Sequence
 
@@ -13,6 +14,7 @@ from .actions import (
 )
 from .data import RequestSummary
 from .filters import HomeFilters, PaginationState
+from slack_workflow_engine.workflows.state import extract_level_from_status, is_pending_status
 
 
 def _divider() -> dict:
@@ -159,10 +161,11 @@ def _pagination_blocks(title: str, prefix: str, pagination: PaginationState) -> 
 
 
 def _decision_payload(summary: RequestSummary) -> str:
-    import json
-
-    payload = json.dumps({"request_id": summary.id, "workflow_type": summary.workflow_type})
-    return payload
+    payload: dict[str, object] = {"request_id": summary.id, "workflow_type": summary.workflow_type}
+    level = extract_level_from_status(summary.status)
+    if level is not None:
+        payload["level"] = level
+    return json.dumps(payload, separators=(",", ":"))
 
 
 def _pending_action_blocks(pending: Sequence[RequestSummary]) -> list[dict]:
@@ -175,7 +178,7 @@ def _pending_action_blocks(pending: Sequence[RequestSummary]) -> list[dict]:
                 "text": f"*Status:* {status_label}",
             }
         ]
-        if summary.status == "PENDING":
+        if is_pending_status(summary.status):
             status_elements.append(
                 {
                     "type": "mrkdwn",
@@ -199,7 +202,7 @@ def _pending_action_blocks(pending: Sequence[RequestSummary]) -> list[dict]:
             }
         )
 
-        actionable = summary.status == "PENDING"
+        actionable = is_pending_status(summary.status)
         blocks.append(
             {
                 "type": "actions",

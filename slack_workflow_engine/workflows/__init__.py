@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from .loader import load_workflow_definition, load_workflow_definitions
-from .models import ApproverConfig, FieldDefinition, WorkflowDefinition
+from .models import ApproverConfig, ApproverLevel, FieldDefinition, WorkflowDefinition
 from .modal import build_modal_view
 from .messages import (
     build_request_message,
@@ -16,6 +16,7 @@ WORKFLOW_DEFINITION_DIR = Path.cwd() / "workflows"
 
 __all__ = [
     "ApproverConfig",
+    "ApproverLevel",
     "FieldDefinition",
     "WorkflowDefinition",
     "load_workflow_definition",

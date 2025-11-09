@@ -63,7 +63,14 @@ def _apply_filters(
         statement = statement.where(Request.type.in_(tuple(dict.fromkeys(workflow_types))))
 
     if statuses:
-        statement = statement.where(Request.status.in_(tuple(dict.fromkeys(statuses))))
+        clauses = []
+        for status in dict.fromkeys(statuses):
+            if status.upper() == "PENDING":
+                clauses.append(Request.status.like("PENDING%"))
+            else:
+                clauses.append(Request.status == status)
+        if clauses:
+            statement = statement.where(or_(*clauses))
 
     start_at = _normalise_dt(start_at)
     end_at = _normalise_dt(end_at)

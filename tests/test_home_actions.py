@@ -53,6 +53,23 @@ class RecordingLogger:
 @pytest.fixture(autouse=True)
 def home_actions_env(monkeypatch, tmp_path):
     db_path = tmp_path / "home-actions.db"
+    workflows_dir = tmp_path / "workflows"
+    workflows_dir.mkdir()
+    workflow = {
+        "type": "refund",
+        "title": "Refund Request",
+        "fields": [
+            {"name": "amount", "label": "Amount", "type": "number", "required": True},
+        ],
+        "approvers": {
+            "strategy": "sequential",
+            "levels": [
+                {"members": ["UAPP"], "quorum": 1},
+            ],
+        },
+        "notify_channel": "CHOME",
+    }
+    (workflows_dir / "refund.json").write_text(json.dumps(workflow), encoding="utf-8")
     monkeypatch.setenv("SLACK_BOT_TOKEN", "token")
     monkeypatch.setenv("SLACK_SIGNING_SECRET", "secret")
     monkeypatch.setenv("APPROVER_USER_IDS", "UAPP")
@@ -65,6 +82,13 @@ def home_actions_env(monkeypatch, tmp_path):
     engine = get_engine()
     Base.metadata.create_all(engine)
 
+    monkeypatch.setattr(app_module, "WORKFLOW_DEFINITION_DIR", workflows_dir)
+    from slack_workflow_engine.workflows import commands as workflow_commands
+    from slack_workflow_engine.workflows import loader as workflow_loader
+
+    monkeypatch.setattr(workflow_commands, "WORKFLOW_DEFINITION_DIR", workflows_dir)
+    workflow_loader.load_workflow_definition.cache_clear()
+
     yield
 
     Base.metadata.drop_all(engine)
@@ -74,7 +98,7 @@ def home_actions_env(monkeypatch, tmp_path):
     get_session_factory.cache_clear()
 
 
-def _create_request(session, *, created_by="UCREATOR", status="PENDING"):
+def _create_request(session, *, created_by="UCREATOR", status="PENDING_L1"):
     request = Request(
         type="refund",
         created_by=created_by,
@@ -89,7 +113,7 @@ def _create_request(session, *, created_by="UCREATOR", status="PENDING"):
     return request_id, workflow_type
 
 
-def _create_request_with_message(session, *, created_by="UCREATOR", status="PENDING"):
+def _create_request_with_message(session, *, created_by="UCREATOR", status="PENDING_L1"):
     request_id, workflow_type = _create_request(session, created_by=created_by, status=status)
     message = Message(request_id=request_id, channel_id="CHOME", ts="1700000000.100")
     session.add(message)
@@ -103,7 +127,7 @@ def _build_body(request_id, workflow_type, *, user_id):
         "trigger_id": "TRIGGER-123",
         "actions": [
             {
-                "value": json.dumps({"request_id": request_id, "workflow_type": workflow_type}),
+                "value": json.dumps({"request_id": request_id, "workflow_type": workflow_type, "level": 1}),
                 "block_id": f"home_pending_actions_{request_id}",
             }
         ],
@@ -118,6 +142,7 @@ def _build_submission_body(
     user_id,
     reason=None,
     attachment_url=None,
+    level=1,
 ):
     values: dict[str, dict] = {}
     if reason is not None:
@@ -128,7 +153,12 @@ def _build_submission_body(
         "user": {"id": user_id},
         "view": {
             "private_metadata": json.dumps(
-                {"request_id": request_id, "workflow_type": workflow_type, "decision": decision}
+                {
+                    "request_id": request_id,
+                    "workflow_type": workflow_type,
+                    "decision": decision,
+                    "level": level,
+                }
             ),
             "state": {"values": values},
         },
@@ -302,7 +332,7 @@ def test_home_decision_submission_requires_reason_for_reject(monkeypatch):
     factory = get_session_factory()
     with factory() as session:
         request = session.get(Request, request_id)
-        assert request.status == "PENDING"
+        assert request.status == "PENDING_L1"
         assert session.query(ApprovalDecision).count() == 0
 
 
@@ -341,7 +371,7 @@ def test_home_decision_submission_validates_attachment_url(monkeypatch):
     factory = get_session_factory()
     with factory() as session:
         request = session.get(Request, request_id)
-        assert request.status == "PENDING"
+        assert request.status == "PENDING_L1"
         assert session.query(ApprovalDecision).count() == 0
 
 
@@ -382,5 +412,5 @@ def test_home_decision_submission_blocks_unauthorized_user(monkeypatch):
     factory = get_session_factory()
     with factory() as session:
         request = session.get(Request, request_id)
-        assert request.status == "PENDING"
+        assert request.status == "PENDING_L1"
         assert session.query(ApprovalDecision).count() == 0

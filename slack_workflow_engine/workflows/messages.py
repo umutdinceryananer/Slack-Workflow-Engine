@@ -84,6 +84,8 @@ def build_request_message(
     submission: Dict[str, Any],
     request_id: int,
     approver_level: int | None = None,
+    status_text: str | None = None,
+    include_actions: bool = True,
 ) -> Dict[str, Any]:
     """Build the canonical Slack message payload for a workflow request."""
 
@@ -102,8 +104,24 @@ def build_request_message(
                 }
             ],
         },
-        _decision_buttons_payload(request_id, definition.type, approver_level),
     ]
+
+    if status_text:
+        blocks.append(
+            {
+                "type": "context",
+                "block_id": "workflow_status",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": status_text,
+                    }
+                ],
+            }
+        )
+
+    if include_actions:
+        blocks.append(_decision_buttons_payload(request_id, definition.type, approver_level))
 
     return {
         "text": f"New {definition.title} request submitted.",
@@ -126,6 +144,7 @@ def build_request_decision_update(
     decided_by: str,
     reason: str | None = None,
     attachment_url: str | None = None,
+    status_text: str | None = None,
 ) -> Dict[str, Any]:
     """Return an updated Slack message payload after a decision."""
 
@@ -133,8 +152,10 @@ def build_request_decision_update(
         definition=definition,
         submission=submission,
         request_id=request_id,
+        status_text=status_text,
+        include_actions=False,
     )
-    blocks = list(base["blocks"][:-1])  # drop the action buttons
+    blocks = list(base["blocks"])
 
     emoji = _DECISION_EMOJI.get(decision.upper(), ":information_source:")
     decision_label = decision.capitalize()

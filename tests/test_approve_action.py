@@ -24,6 +24,24 @@ from slack_workflow_engine.workflows.storage import (
 @pytest.fixture(autouse=True)
 def configure_environment(monkeypatch, tmp_path):
     db_path = tmp_path / "actions.db"
+    workflows_dir = tmp_path / "workflows"
+    workflows_dir.mkdir()
+    workflow = {
+        "type": "refund",
+        "title": "Refund Request",
+        "fields": [
+            {"name": "order_id", "label": "Order ID", "type": "text", "required": True},
+        ],
+        "approvers": {
+            "strategy": "sequential",
+            "levels": [
+                {"members": ["U123"], "quorum": 1},
+            ],
+        },
+        "notify_channel": "CREFUND",
+    }
+    (workflows_dir / "refund.json").write_text(json.dumps(workflow), encoding="utf-8")
+
     monkeypatch.setenv("SLACK_BOT_TOKEN", "token")
     monkeypatch.setenv("SLACK_SIGNING_SECRET", "secret")
     monkeypatch.setenv("APPROVER_USER_IDS", "U123,U456")
@@ -35,6 +53,12 @@ def configure_environment(monkeypatch, tmp_path):
 
     engine = get_engine()
     Base.metadata.create_all(engine)
+    monkeypatch.setattr(app_module, "WORKFLOW_DEFINITION_DIR", workflows_dir)
+    from slack_workflow_engine.workflows import commands as workflow_commands
+    from slack_workflow_engine.workflows import loader as workflow_loader
+
+    monkeypatch.setattr(workflow_commands, "WORKFLOW_DEFINITION_DIR", workflows_dir)
+    workflow_loader.load_workflow_definition.cache_clear()
 
     yield
 
@@ -82,6 +106,7 @@ def _create_request_with_message():
         created_by="U222",
         payload_json=canonical_json(submission),
         request_key="key-approve",
+        status="PENDING_L1",
     )
     save_message_reference(
         request_id=request.id,
@@ -162,7 +187,7 @@ def test_handle_approve_action_unauthorized(monkeypatch, logger):
     factory = get_session_factory()
     with factory() as session:
         refreshed = session.get(Request, request.id)
-        assert refreshed.status == "PENDING"
+        assert refreshed.status == "PENDING_L1"
         assert session.query(ApprovalDecision).count() == 0
 
 

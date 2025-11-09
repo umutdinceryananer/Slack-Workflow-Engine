@@ -21,6 +21,7 @@ def build_home_decision_modal(
     decision: Literal["APPROVED", "REJECTED"],
     request_id: int,
     workflow_type: str,
+    level: int | None = None,
 ) -> dict:
     """Return a modal prompting the approver for decision context."""
 
@@ -33,6 +34,7 @@ def build_home_decision_modal(
             "request_id": request_id,
             "workflow_type": workflow_type,
             "decision": decision,
+            "level": level,
         }
     )
 

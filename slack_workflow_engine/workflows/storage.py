@@ -10,7 +10,14 @@ from slack_workflow_engine.db import session_scope
 from slack_workflow_engine.models import Message, Request, DuplicateRequestError
 
 
-def save_request(*, workflow_type: str, created_by: str, payload_json: str, request_key: str) -> Request:
+def save_request(
+    *,
+    workflow_type: str,
+    created_by: str,
+    payload_json: str,
+    request_key: str,
+    status: str = "PENDING",
+) -> Request:
     """Persist a new workflow request and return the saved entity."""
 
     with session_scope() as session:
@@ -24,7 +31,7 @@ def save_request(*, workflow_type: str, created_by: str, payload_json: str, requ
             type=workflow_type,
             created_by=created_by,
             payload_json=payload_json,
-            status="PENDING",
+            status=status,
             created_at=datetime.now(UTC),
             updated_at=datetime.now(UTC),
             request_key=request_key,

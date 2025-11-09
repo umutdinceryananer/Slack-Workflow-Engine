@@ -24,6 +24,23 @@ from slack_workflow_engine.workflows.storage import (  # noqa: E402
 @pytest.fixture(autouse=True)
 def configure_environment(monkeypatch, tmp_path):
     db_path = tmp_path / "reject_actions.db"
+    workflows_dir = tmp_path / "workflows"
+    workflows_dir.mkdir()
+    workflow = {
+        "type": "refund",
+        "title": "Refund Request",
+        "fields": [
+            {"name": "order_id", "label": "Order ID", "type": "text", "required": True},
+        ],
+        "approvers": {
+            "strategy": "sequential",
+            "levels": [
+                {"members": ["U1", "U2"], "quorum": 1},
+            ],
+        },
+        "notify_channel": "CREFUND",
+    }
+    (workflows_dir / "refund.json").write_text(json.dumps(workflow), encoding="utf-8")
     monkeypatch.setenv("SLACK_BOT_TOKEN", "token")
     monkeypatch.setenv("SLACK_SIGNING_SECRET", "secret")
     monkeypatch.setenv("APPROVER_USER_IDS", "U1,U2")
@@ -35,6 +52,13 @@ def configure_environment(monkeypatch, tmp_path):
 
     engine = get_engine()
     Base.metadata.create_all(engine)
+
+    monkeypatch.setattr(app_module, "WORKFLOW_DEFINITION_DIR", workflows_dir)
+    from slack_workflow_engine.workflows import commands as workflow_commands
+    from slack_workflow_engine.workflows import loader as workflow_loader
+
+    monkeypatch.setattr(workflow_commands, "WORKFLOW_DEFINITION_DIR", workflows_dir)
+    workflow_loader.load_workflow_definition.cache_clear()
 
     yield
 
@@ -81,6 +105,7 @@ def _create_request_with_message():
         created_by="U9",
         payload_json=canonical_json({"order_id": "R-1"}),
         request_key="reject-key-1",
+        status="PENDING_L1",
     )
     save_message_reference(
         request_id=request.id,
@@ -169,7 +194,7 @@ def test_handle_reject_action_unauthorized(monkeypatch, logger):
     factory = get_session_factory()
     with factory() as session:
         refreshed = session.get(Request, request.id)
-        assert refreshed.status == "PENDING"
+        assert refreshed.status == "PENDING_L1"
         assert session.query(ApprovalDecision).count() == 0
 
 
@@ -183,6 +208,7 @@ def test_handle_reject_action_self_guard(monkeypatch, logger):
         created_by="U9",
         payload_json=canonical_json(submission),
         request_key="key-self-reject",
+        status="PENDING_L1",
     )
     save_message_reference(
         request_id=request.id,
@@ -220,7 +246,7 @@ def test_handle_reject_action_self_guard(monkeypatch, logger):
     factory = get_session_factory()
     with factory() as session:
         refreshed = session.get(Request, request.id)
-        assert refreshed.status == "PENDING"
+        assert refreshed.status == "PENDING_L1"
         assert session.query(ApprovalDecision).count() == 0
 
 

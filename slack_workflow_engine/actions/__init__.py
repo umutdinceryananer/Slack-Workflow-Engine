@@ -13,6 +13,7 @@ class ActionContext:
 
     request_id: int
     workflow_type: str
+    level: int | None = None
 
 
 def parse_action_context(raw_value: str) -> ActionContext:
@@ -34,7 +35,11 @@ def parse_action_context(raw_value: str) -> ActionContext:
     if not isinstance(workflow_type, str) or not workflow_type:
         raise ValueError("Invalid action payload.")
 
-    return ActionContext(request_id=request_id, workflow_type=workflow_type)
+    level = payload.get("level")
+    if level is not None and not isinstance(level, int):
+        raise ValueError("Invalid action payload.")
+
+    return ActionContext(request_id=request_id, workflow_type=workflow_type, level=level)
 
 
 def is_user_authorized(user_id: str, allowed_ids: Iterable[str]) -> bool:
@@ -42,4 +47,3 @@ def is_user_authorized(user_id: str, allowed_ids: Iterable[str]) -> bool:
 
     normalized = {item.strip() for item in allowed_ids if item}
     return user_id in normalized
-

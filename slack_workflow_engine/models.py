@@ -113,6 +113,21 @@ _ALLOWED_TRANSITIONS = {
 }
 
 
+def _is_pending_status(value: str) -> bool:
+    return value.upper().startswith("PENDING")
+
+
+def _can_transition(previous_status: str, new_status: str) -> bool:
+    if previous_status == new_status:
+        return False
+
+    if _is_pending_status(previous_status):
+        return _is_pending_status(new_status) or new_status in {"APPROVED", "REJECTED"}
+
+    allowed = _ALLOWED_TRANSITIONS.get(previous_status, set())
+    return new_status in allowed
+
+
 def advance_request_status(
     session: Session,
     request: Request,
@@ -125,8 +140,7 @@ def advance_request_status(
 
     decided_time = decided_at or datetime.now(UTC)
     previous_status = request.status
-    allowed = _ALLOWED_TRANSITIONS.get(previous_status, set())
-    if new_status not in allowed:
+    if not _can_transition(previous_status, new_status):
         raise StatusTransitionError(f"Cannot transition from {previous_status} to {new_status}")
 
     stmt = (
@@ -156,5 +170,6 @@ def advance_request_status(
             changed_by=decided_by,
         )
     )
+    session.flush()
 
     return request

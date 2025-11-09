@@ -9,8 +9,14 @@
   "approvers": {
     "strategy": "sequential",
     "levels": [
-      ["UAPP_L1_PRIMARY", "UAPP_L1_BACKUP"],
-      ["UAPP_L2_REVIEWER"]
+      {
+        "members": ["UAPP_L1_PRIMARY", "UAPP_L1_BACKUP"],
+        "quorum": 1
+      },
+      {
+        "members": ["UAPP_L2_REVIEWER"],
+        "tie_breaker": "UAPP_FINANCE_LEAD"
+      }
     ]
   },
   "notify_channel": "C09QA3GA5RB"

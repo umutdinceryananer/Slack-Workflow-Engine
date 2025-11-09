@@ -22,6 +22,8 @@ def publish_request_message(
     request_id: int,
     logger,
     trace_id: str | None = None,
+    approver_level: int | None = None,
+    status_text: str | None = None,
 ) -> None:
     """Post the workflow request message to Slack and store its reference."""
 
@@ -35,6 +37,8 @@ def publish_request_message(
         definition=definition,
         submission=submission,
         request_id=request_id,
+        approver_level=approver_level,
+        status_text=status_text,
     )
 
     try:
@@ -91,13 +95,16 @@ def update_request_message(
     definition: WorkflowDefinition,
     submission: Mapping[str, Any],
     request_id: int,
-    decision: str,
     decided_by: str,
     channel_id: str,
     ts: str,
     logger,
+    decision: str | None = None,
     reason: str | None = None,
     attachment_url: str | None = None,
+    status_text: str | None = None,
+    approver_level: int | None = None,
+    include_actions: bool | None = None,
     trace_id: str | None = None,
 ) -> None:
     """Update an existing Slack message to reflect the latest decision."""
@@ -108,15 +115,26 @@ def update_request_message(
         workflow_type=definition.type,
         channel=channel_id,
     )
-    payload = build_request_decision_update(
-        definition=definition,
-        submission=submission,
-        request_id=request_id,
-        decision=decision,
-        decided_by=decided_by,
-        reason=reason,
-        attachment_url=attachment_url,
-    )
+    if decision:
+        payload = build_request_decision_update(
+            definition=definition,
+            submission=submission,
+            request_id=request_id,
+            decision=decision,
+            decided_by=decided_by,
+            reason=reason,
+            attachment_url=attachment_url,
+            status_text=status_text,
+        )
+    else:
+        payload = build_request_message(
+            definition=definition,
+            submission=submission,
+            request_id=request_id,
+            approver_level=approver_level,
+            status_text=status_text,
+            include_actions=True if include_actions is None else include_actions,
+        )
 
     try:
         slack_client.update_message(

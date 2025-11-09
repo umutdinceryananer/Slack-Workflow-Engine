@@ -28,7 +28,7 @@ def configure_environment(monkeypatch, tmp_path):
             {"name": "order_id", "label": "Order ID", "type": "text", "required": True},
             {"name": "amount", "label": "Amount", "type": "number"},
         ],
-        "approvers": {"strategy": "sequential", "levels": [["U1", "U2"]]},
+        "approvers": {"strategy": "sequential", "levels": [{"members": ["U1"], "quorum": 1}, {"members": ["U2"], "quorum": 1}]},
         "notify_channel": "CREFUND",
     }
     (workflows_dir / "refund.json").write_text(json.dumps(workflow), encoding="utf-8")
@@ -43,6 +43,11 @@ def configure_environment(monkeypatch, tmp_path):
     get_session_factory.cache_clear()
 
     monkeypatch.setattr(app_module, "WORKFLOW_DEFINITION_DIR", workflows_dir)
+    from slack_workflow_engine.workflows import commands as workflow_commands
+    from slack_workflow_engine.workflows import loader as workflow_loader
+
+    monkeypatch.setattr(workflow_commands, "WORKFLOW_DEFINITION_DIR", workflows_dir)
+    workflow_loader.load_workflow_definition.cache_clear()
 
     engine = get_engine()
     Base.metadata.create_all(engine)
@@ -119,16 +124,16 @@ def test_submit_and_approve_flow(monkeypatch):
     factory = get_session_factory()
     with factory() as session:
         request = session.query(Request).one()
-        assert request.status == "PENDING"
+        assert request.status == "PENDING_L1"
         message = session.query(Message).one()
-        action_body = {
-            "user": {"id": "U1"},
-            "actions": [
-                {
-                    "value": json.dumps({"request_id": request.id, "workflow_type": "refund"}),
-                }
-            ],
-        }
+    level1_action = {
+        "user": {"id": "U1"},
+        "actions": [
+            {
+                "value": json.dumps({"request_id": request.id, "workflow_type": "refund", "level": 1}),
+            }
+        ],
+    }
 
     ack_calls = []
 
@@ -137,7 +142,7 @@ def test_submit_and_approve_flow(monkeypatch):
 
     app_module._handle_approve_action(
         ack=ack_action,
-        body=action_body,
+        body=level1_action,
         client=slack_client,
         logger=bolt_logger,
     )
@@ -145,16 +150,45 @@ def test_submit_and_approve_flow(monkeypatch):
     assert ack_calls == [{"response_type": "ephemeral", "text": "Request approved."}]
     assert slack_client.update_calls
     publish_targets = {call["user_id"] for call in slack_client.publish_calls}
-    assert publish_targets == {"U1", "U123"}
+    assert {"U1", "U123", "U2"}.issubset(publish_targets)
+
+    with factory() as session:
+        mid_state = session.get(Request, request.id)
+        assert mid_state.status == "PENDING_L2"
+        assert mid_state.decided_by == "U1"
+
+    level2_action = {
+        "user": {"id": "U2"},
+        "actions": [
+            {
+                "value": json.dumps({"request_id": request.id, "workflow_type": "refund", "level": 2}),
+            }
+        ],
+    }
+
+    final_ack_calls: list = []
+
+    def ack_action_level2(payload=None):
+        final_ack_calls.append(payload)
+
+    app_module._handle_approve_action(
+        ack=ack_action_level2,
+        body=level2_action,
+        client=slack_client,
+        logger=bolt_logger,
+    )
+
+    assert final_ack_calls == [{"response_type": "ephemeral", "text": "Request approved."}]
 
     with factory() as session:
         refreshed = session.get(Request, request.id)
         assert refreshed.status == "APPROVED"
-        assert refreshed.decided_by == "U1"
-        approval = session.query(ApprovalDecision).filter_by(request_id=request.id).one()
-        assert approval.decision == "APPROVED"
-        assert approval.reason is None
-        assert approval.source == "channel"
+        assert refreshed.decided_by == "U2"
+        approvals = session.query(ApprovalDecision).filter_by(request_id=request.id).all()
+        assert {decision.level for decision in approvals} == {1, 2}
+        assert approvals[-1].decision == "APPROVED"
+        assert approvals[-1].reason is None
+        assert approvals[-1].source == "channel"
 
 
 def test_submit_and_reject_flow(monkeypatch):
@@ -196,9 +230,25 @@ def test_submit_and_reject_flow(monkeypatch):
     factory = get_session_factory()
     with factory() as session:
         request = session.query(Request).one()
-        assert request.status == "PENDING"
+        assert request.status == "PENDING_L1"
 
     ack_calls = []
+
+    level1_action = {
+        "user": {"id": "U1"},
+        "actions": [
+            {
+                "value": json.dumps({"request_id": request.id, "workflow_type": "refund", "level": 1}),
+            }
+        ],
+    }
+
+    app_module._handle_approve_action(
+        ack=lambda payload=None: None,
+        body=level1_action,
+        client=slack_client,
+        logger=bolt_logger,
+    )
 
     def ack_action(payload=None):
         ack_calls.append(payload)
@@ -207,7 +257,7 @@ def test_submit_and_reject_flow(monkeypatch):
         "user": {"id": "U2"},
         "actions": [
             {
-                "value": json.dumps({"request_id": request.id, "workflow_type": "refund"}),
+                "value": json.dumps({"request_id": request.id, "workflow_type": "refund", "level": 2}),
             }
         ],
         "state": {
@@ -227,7 +277,7 @@ def test_submit_and_reject_flow(monkeypatch):
     assert ack_calls == [{"response_type": "ephemeral", "text": "Request rejected."}]
     assert slack_client.update_calls
     publish_targets = {call["user_id"] for call in slack_client.publish_calls}
-    assert publish_targets == {"U2", "U123"}
+    assert {"U1", "U2", "U123"}.issubset(publish_targets)
     reason_payload = json.dumps(slack_client.update_calls[-1]["blocks"])
     assert "Budget exceeded" in reason_payload
 
@@ -235,7 +285,9 @@ def test_submit_and_reject_flow(monkeypatch):
         refreshed = session.get(Request, request.id)
         assert refreshed.status == "REJECTED"
         assert refreshed.decided_by == "U2"
-        approval = session.query(ApprovalDecision).filter_by(request_id=request.id).one()
-        assert approval.decision == "REJECTED"
-        assert approval.reason == "Budget exceeded"
-        assert approval.source == "channel"
+        approvals = session.query(ApprovalDecision).filter_by(request_id=request.id).all()
+        assert {decision.level for decision in approvals} == {1, 2}
+        final = approvals[-1]
+        assert final.decision == "REJECTED"
+        assert final.reason == "Budget exceeded"
+        assert final.source == "channel"

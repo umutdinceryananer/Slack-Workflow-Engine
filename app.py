@@ -64,6 +64,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 
 
 
@@ -1397,6 +1399,16 @@ from slack_workflow_engine.workflows.requests import (
 
 
 
+
+
+from slack_workflow_engine.workflows.state import (
+    compute_level_runtime,
+    derive_initial_status,
+    extract_level_from_status,
+    format_status_text,
+    is_pending_status,
+    pending_status,
+)
 
 from slack_workflow_engine.workflows.storage import save_request
 
@@ -3601,6 +3613,8 @@ def _handle_view_submission(ack, body, client, logger):
 
 
 
+        initial_status = derive_initial_status(definition)
+
         try:
 
             request = save_request(
@@ -3612,6 +3626,8 @@ def _handle_view_submission(ack, body, client, logger):
                 payload_json=canonical_payload,
 
                 request_key=request_key,
+
+                status=initial_status,
 
             )
 
@@ -3639,6 +3655,12 @@ def _handle_view_submission(ack, body, client, logger):
 
 
 
+        runtime = compute_level_runtime(
+            definition=definition,
+            status=initial_status,
+            decisions=[],
+        )
+        status_text = format_status_text(runtime)
         ack({"response_action": "clear"})
 
         run_async(
@@ -3649,6 +3671,8 @@ def _handle_view_submission(ack, body, client, logger):
             request_id=request.id,
             logger=logger,
             trace_id=trace_id,
+            approver_level=extract_level_from_status(initial_status),
+            status_text=status_text,
         )
     finally:
 
@@ -4428,15 +4452,20 @@ def _record_approval_decision(
 ) -> None:
 
     cleaned_reason = (reason or "").strip() or None
-
     cleaned_attachment = (attachment_url or "").strip() or None
+    decided_at = datetime.now(UTC)
 
-    decided_at = request.decided_at or datetime.now(UTC)
-
-    existing = request.approvals[0] if request.approvals else None
+    existing = (
+        session.query(ApprovalDecision)
+        .filter(
+            ApprovalDecision.request_id == request.id,
+            ApprovalDecision.level == level,
+            ApprovalDecision.decided_by == decided_by,
+        )
+        .one_or_none()
+    )
 
     if existing is None:
-
         session.add(
             ApprovalDecision(
                 request_id=request.id,
@@ -4449,7 +4478,6 @@ def _record_approval_decision(
                 source=source,
             )
         )
-
         return
 
     existing.decision = decision
@@ -4459,6 +4487,135 @@ def _record_approval_decision(
     existing.reason = cleaned_reason
     existing.attachment_url = cleaned_attachment
     existing.source = source
+
+
+class LevelPermissionError(Exception):
+    """Raised when an approver attempts to act on a level they are not assigned to."""
+
+
+@dataclass(frozen=True)
+class DecisionResult:
+    final_decision: str | None
+    status_text: str
+    approver_level: int | None
+    include_actions: bool
+    waiting_on: list[str]
+
+
+def _load_level_decisions(session, *, request_id: int, level: int | None) -> list[ApprovalDecision]:
+    if not level:
+        return []
+    return (
+        session.query(ApprovalDecision)
+        .filter(ApprovalDecision.request_id == request_id, ApprovalDecision.level == level)
+        .all()
+    )
+
+
+def _build_status_text(
+    *,
+    session,
+    definition: WorkflowDefinition,
+    request: Request,
+) -> str:
+    level = extract_level_from_status(request.status)
+    decisions = _load_level_decisions(session, request_id=request.id, level=level)
+    runtime = compute_level_runtime(definition=definition, status=request.status, decisions=decisions)
+    return format_status_text(runtime)
+
+
+def _apply_level_decision(
+    session,
+    *,
+    request: Request,
+    definition: WorkflowDefinition,
+    user_id: str,
+    decision: str,
+    source: str,
+    reason: str | None,
+    attachment_url: str | None,
+) -> DecisionResult:
+    if not is_pending_status(request.status):
+        raise StatusTransitionError(f"Request {request.id} is no longer pending.")
+
+    level_index = extract_level_from_status(request.status) or 1
+    level_decisions = _load_level_decisions(session, request_id=request.id, level=level_index)
+    runtime_before = compute_level_runtime(definition=definition, status=request.status, decisions=level_decisions)
+    if runtime_before.level is None:
+        raise StatusTransitionError(f"Request {request.id} has no actionable levels.")
+
+    if user_id not in runtime_before.waiting_on:
+        raise LevelPermissionError("This request is not waiting on your decision.")
+
+    level_def = definition.approvers.levels[level_index - 1]
+    awaiting_tie = runtime_before.awaiting_tie_breaker
+    tie_breaker_acting = awaiting_tie and level_def.tie_breaker == user_id
+
+    _record_approval_decision(
+        session,
+        request=request,
+        decision=decision,
+        decided_by=user_id,
+        reason=reason,
+        attachment_url=attachment_url,
+        source=source,
+        level=level_index,
+    )
+    session.flush()
+
+    level_decisions = _load_level_decisions(session, request_id=request.id, level=level_index)
+    runtime_after = compute_level_runtime(definition=definition, status=request.status, decisions=level_decisions)
+
+    final_decision: str | None = None
+    include_actions = True
+    level_completed = False
+    quorum = runtime_after.quorum or len(level_def.members)
+
+    if decision == "REJECTED":
+        if tie_breaker_acting or not awaiting_tie:
+            final_decision = "REJECTED"
+            include_actions = False
+    elif tie_breaker_acting and decision == "APPROVED":
+        level_completed = True
+    elif runtime_after.approvals >= quorum:
+        level_completed = True
+    elif runtime_after.rejections > 0 and not awaiting_tie:
+        final_decision = "REJECTED"
+        include_actions = False
+
+    if not final_decision and not level_completed:
+        if not runtime_after.waiting_on and not runtime_after.awaiting_tie_breaker:
+            final_decision = "REJECTED"
+            include_actions = False
+
+    if final_decision == "REJECTED":
+        advance_request_status(session, request, new_status="REJECTED", decided_by=user_id)
+    elif level_completed:
+        if level_index >= len(definition.approvers.levels):
+            advance_request_status(session, request, new_status="APPROVED", decided_by=user_id)
+            final_decision = "APPROVED"
+            include_actions = False
+        else:
+            next_status = pending_status(level_index + 1)
+            advance_request_status(session, request, new_status=next_status, decided_by=user_id)
+
+    post_level = extract_level_from_status(request.status)
+    post_decisions = _load_level_decisions(session, request_id=request.id, level=post_level)
+    post_runtime = compute_level_runtime(
+        definition=definition,
+        status=request.status,
+        decisions=post_decisions,
+    )
+    status_text = format_status_text(post_runtime)
+    approver_level = post_runtime.level if include_actions else None
+
+    return DecisionResult(
+        final_decision=final_decision,
+        status_text=status_text,
+        approver_level=approver_level,
+        include_actions=include_actions,
+        waiting_on=list(post_runtime.waiting_on),
+    )
 
 
 
@@ -4555,555 +4712,355 @@ def _record_approval_decision(
 
 
 def _handle_approve_action(ack, body, client, logger):
-
     trace_id = str(uuid4())
-
     bind_contextvars(trace_id=trace_id)
-
     log = structlog.get_logger().bind(trace_id=trace_id)
-
     try:
-
         actions = body.get("actions") or []
-
         try:
-
             action_payload = actions[0]
-
         except IndexError:
-
             ack({"response_type": "ephemeral", "text": "Unable to process this action payload."})
-
             return
-
-
 
         try:
-
             context = parse_action_context(action_payload.get("value", ""))
-
         except ValueError:
-
             ack({"response_type": "ephemeral", "text": "This action payload is invalid. Please retry from Slack."})
-
             log.warning("invalid_action_payload")
-
             return
-
-
 
         log = log.bind(request_id=context.request_id, workflow_type=context.workflow_type)
 
-
-
         user_id = body.get("user", {}).get("id")
-
         if not user_id:
-
             ack({"response_type": "ephemeral", "text": "We could not identify the acting user."})
-
             log.warning("missing_user_id")
-
             return
-
-
 
         settings = get_settings()
-
         if not is_user_authorized(user_id, settings.approver_user_ids):
-
             ack()
-
             channel_id = body.get("channel", {}).get("id")
-
             if channel_id:
-
                 client.chat_postEphemeral(
-
                     channel=channel_id,
-
                     user=user_id,
-
                     text="You are not authorized to approve this request.",
-
                 )
-
             log.warning("unauthorized_attempt", user_id=user_id)
-
             return
-
-
-
-        submission_payload = ""
-
-        channel_id = ""
-
-        ts = ""
 
         attachment_url = _extract_attachment_url(body)
 
+        try:
+            definition = load_workflow_or_raise(context.workflow_type)
+        except (FileNotFoundError, ValidationError):
+            logger.exception(
+                "Unable to load workflow definition during approval",
+                extra={"workflow_type": context.workflow_type},
+            )
+            ack({"response_type": "ephemeral", "text": "Workflow definition invalid."})
+            return
+
+        submission_payload = ""
+        channel_id = ""
+        ts = ""
         request_owner = ""
+        result = None
 
         with session_scope() as session:
-
             request = session.get(Request, context.request_id)
-
             if request is None:
-
                 ack({"response_type": "ephemeral", "text": "Request could not be found."})
-
                 log.warning("request_missing", user_id=user_id)
-
                 return
-
-
 
             if request.type != context.workflow_type:
-
                 ack({"response_type": "ephemeral", "text": "Workflow type mismatch for this request."})
-
                 log.warning("workflow_type_mismatch", request_type=request.type, expected=context.workflow_type)
-
                 return
-
-
 
             message = request.message
-
             if message is None:
-
                 ack({"response_type": "ephemeral", "text": "Request message is not yet available."})
-
                 log.warning("message_reference_missing", user_id=user_id)
-
                 return
-
-
 
             if request.created_by == user_id:
-
                 ack()
-
                 client.chat_postEphemeral(
-
                     channel=message.channel_id,
-
                     user=user_id,
-
                     text="You cannot approve your own request.",
-
                 )
-
                 log.info("self_approval_blocked", user_id=user_id)
-
                 return
 
-
+            active_level = extract_level_from_status(request.status)
+            if context.level is not None and active_level is not None and context.level != active_level:
+                ack({"response_type": "ephemeral", "text": "This request advanced to a new level. Please refresh and try again."})
+                log.info("level_mismatch", payload_level=context.level, current_level=active_level)
+                return
 
             submission_payload = request.payload_json
-
             channel_id = message.channel_id
-
             ts = message.ts
-
             request_owner = request.created_by
-
             log = log.bind(message_channel=channel_id)
 
-
-
             try:
-
-                advance_request_status(
-
-                    session,
-
-                    request,
-
-                    new_status="APPROVED",
-
-                    decided_by=user_id,
-
-                )
-
-                _record_approval_decision(
+                result = _apply_level_decision(
                     session,
                     request=request,
+                    definition=definition,
+                    user_id=user_id,
                     decision="APPROVED",
-                    decided_by=user_id,
+                    source="channel",
                     reason=None,
                     attachment_url=attachment_url,
-                    source="channel",
                 )
-
+            except LevelPermissionError:
+                ack({"response_type": "ephemeral", "text": "This request is not currently waiting on you."})
+                log.info("level_not_waiting", user_id=user_id)
+                return
             except StatusTransitionError:
-
                 ack()
-
                 client.chat_postEphemeral(
-
                     channel=message.channel_id,
-
                     user=user_id,
-
                     text="This request has already been decided.",
-
                 )
-
                 log.info("decision_already_recorded", user_id=user_id, decision=request.status)
-
                 return
-
             except OptimisticLockError:
-
                 ack({"response_type": "ephemeral", "text": "Request was updated concurrently. Please try again."})
-
                 log.warning("optimistic_lock_failed", user_id=user_id)
-
                 return
 
-
+        if result is None:
+            ack({"response_type": "ephemeral", "text": "Unable to record this approval."})
+            log.warning("approval_result_missing", user_id=user_id)
+            return
 
         ack({"response_type": "ephemeral", "text": "Request approved."})
         log.info("approved", decided_by=user_id)
 
-
         try:
-
-            definition = load_workflow_or_raise(context.workflow_type)
-
-        except (FileNotFoundError, ValidationError):
-
-            logger.exception(
-
-                "Unable to load workflow definition during approval",
-
-                extra={"workflow_type": context.workflow_type},
-
-            )
-
-            return
-
-
-
-        try:
-
             submission = json.loads(submission_payload) if submission_payload else {}
-
         except json.JSONDecodeError:
-
             logger.exception(
-
                 "Stored payload_json is invalid JSON",
-
                 extra={"request_id": context.request_id},
-
             )
-
             submission = {}
 
-
-
         run_async(
-        update_request_message,
-        client=client,
-        definition=definition,
-        submission=submission,
-        request_id=context.request_id,
-        decision="APPROVED",
-        decided_by=user_id,
-        channel_id=channel_id,
-        ts=ts,
-        logger=logger,
-        attachment_url=attachment_url,
-        trace_id=trace_id,
-    )
+            update_request_message,
+            client=client,
+            definition=definition,
+            submission=submission,
+            request_id=context.request_id,
+            decided_by=user_id,
+            channel_id=channel_id,
+            ts=ts,
+            logger=logger,
+            decision=result.final_decision,
+            reason=None,
+            attachment_url=attachment_url if result.final_decision else None,
+            status_text=result.status_text,
+            approver_level=result.approver_level,
+            include_actions=result.include_actions,
+            trace_id=trace_id,
+        )
+
+        refresh_targets = {user_id, request_owner}
+        refresh_targets.update(result.waiting_on or [])
 
         _schedule_home_refresh(
             client=client,
             logger=logger,
-            user_ids={user_id, request_owner},
+            user_ids=refresh_targets,
             trace_id=trace_id,
         )
     finally:
-
         unbind_contextvars("trace_id")
 
+
 def _handle_reject_action(ack, body, client, logger):
-
     trace_id = str(uuid4())
-
     bind_contextvars(trace_id=trace_id)
-
     log = structlog.get_logger().bind(trace_id=trace_id)
-
     try:
-
         actions = body.get("actions") or []
-
         try:
-
             action_payload = actions[0]
-
         except IndexError:
-
             ack({"response_type": "ephemeral", "text": "Unable to process this action payload."})
-
             return
-
-
 
         try:
-
             context = parse_action_context(action_payload.get("value", ""))
-
         except ValueError:
-
             ack({"response_type": "ephemeral", "text": "This action payload is invalid. Please retry from Slack."})
-
             log.warning("invalid_action_payload")
-
             return
-
-
 
         log = log.bind(request_id=context.request_id, workflow_type=context.workflow_type)
 
-
-
         user_id = body.get("user", {}).get("id")
-
         if not user_id:
-
             ack({"response_type": "ephemeral", "text": "We could not identify the acting user."})
-
             log.warning("missing_user_id")
-
             return
-
-
 
         settings = get_settings()
-
         if not is_user_authorized(user_id, settings.approver_user_ids):
-
             ack()
-
             channel_id = body.get("channel", {}).get("id")
-
             if channel_id:
-
                 client.chat_postEphemeral(
-
                     channel=channel_id,
-
                     user=user_id,
-
                     text="You are not authorized to reject this request.",
-
                 )
-
             log.warning("unauthorized_attempt", user_id=user_id)
-
             return
-
-
-
-        submission_payload = ""
-
-        channel_id = ""
-
-        ts = ""
 
         reason = _extract_action_reason(body)
         attachment_url = _extract_attachment_url(body)
 
+        try:
+            definition = load_workflow_or_raise(context.workflow_type)
+        except (FileNotFoundError, ValidationError):
+            logger.exception(
+                "Unable to load workflow definition during rejection",
+                extra={"workflow_type": context.workflow_type},
+            )
+            ack({"response_type": "ephemeral", "text": "Workflow definition invalid."})
+            return
+
+        submission_payload = ""
+        channel_id = ""
+        ts = ""
         request_owner = ""
+        result = None
 
         with session_scope() as session:
-
             request = session.get(Request, context.request_id)
-
             if request is None:
-
                 ack({"response_type": "ephemeral", "text": "Request could not be found."})
-
                 log.warning("request_missing", user_id=user_id)
-
                 return
-
-
 
             if request.type != context.workflow_type:
-
                 ack({"response_type": "ephemeral", "text": "Workflow type mismatch for this request."})
-
                 log.warning("workflow_type_mismatch", request_type=request.type, expected=context.workflow_type)
-
                 return
-
-
 
             message = request.message
-
             if message is None:
-
                 ack({"response_type": "ephemeral", "text": "Request message is not yet available."})
-
                 log.warning("message_reference_missing", user_id=user_id)
-
                 return
-
-
 
             if request.created_by == user_id:
-
                 ack()
-
                 client.chat_postEphemeral(
-
                     channel=message.channel_id,
-
                     user=user_id,
-
                     text="You cannot reject your own request.",
-
                 )
-
                 log.info("self_reject_blocked", user_id=user_id)
-
                 return
 
-
+            active_level = extract_level_from_status(request.status)
+            if context.level is not None and active_level is not None and context.level != active_level:
+                ack({"response_type": "ephemeral", "text": "This request advanced to a new level. Please refresh and try again."})
+                log.info("level_mismatch", payload_level=context.level, current_level=active_level)
+                return
 
             submission_payload = request.payload_json
-
             channel_id = message.channel_id
-
             ts = message.ts
-
             request_owner = request.created_by
-
             log = log.bind(message_channel=channel_id)
 
-
-
             try:
-
-                advance_request_status(
-
-                    session,
-
-                    request,
-
-                    new_status="REJECTED",
-
-                    decided_by=user_id,
-
-                )
-
-                _record_approval_decision(
+                result = _apply_level_decision(
                     session,
                     request=request,
+                    definition=definition,
+                    user_id=user_id,
                     decision="REJECTED",
-                    decided_by=user_id,
+                    source="channel",
                     reason=reason,
                     attachment_url=attachment_url,
-                    source="channel",
                 )
-
+            except LevelPermissionError:
+                ack({"response_type": "ephemeral", "text": "This request is not currently waiting on you."})
+                log.info("level_not_waiting", user_id=user_id)
+                return
             except StatusTransitionError:
-
                 ack()
-
                 client.chat_postEphemeral(
-
                     channel=message.channel_id,
-
                     user=user_id,
-
                     text="This request has already been decided.",
-
                 )
-
                 log.info("decision_already_recorded", user_id=user_id, decision=request.status)
-
                 return
-
             except OptimisticLockError:
-
                 ack({"response_type": "ephemeral", "text": "Request was updated concurrently. Please try again."})
-
                 log.warning("optimistic_lock_failed", user_id=user_id)
-
                 return
 
-
+        if result is None:
+            ack({"response_type": "ephemeral", "text": "Unable to record this rejection."})
+            log.warning("rejection_result_missing", user_id=user_id)
+            return
 
         ack({"response_type": "ephemeral", "text": "Request rejected."})
         log.info("rejected", decided_by=user_id, reason=reason or None)
 
-
         try:
-
-            definition = load_workflow_or_raise(context.workflow_type)
-
-        except (FileNotFoundError, ValidationError):
-
-            logger.exception(
-
-                "Unable to load workflow definition during rejection",
-
-                extra={"workflow_type": context.workflow_type},
-
-            )
-
-            return
-
-
-
-        try:
-
             submission = json.loads(submission_payload) if submission_payload else {}
-
         except json.JSONDecodeError:
-
             logger.exception(
-
                 "Stored payload_json is invalid JSON",
-
                 extra={"request_id": context.request_id},
-
             )
-
             submission = {}
 
-
-
         run_async(
-        update_request_message,
-        client=client,
-        definition=definition,
-        submission=submission,
-        request_id=context.request_id,
-        decision="REJECTED",
-        decided_by=user_id,
-        channel_id=channel_id,
-        ts=ts,
-        logger=logger,
-        reason=reason,
-        attachment_url=attachment_url,
-        trace_id=trace_id,
-    )
+            update_request_message,
+            client=client,
+            definition=definition,
+            submission=submission,
+            request_id=context.request_id,
+            decided_by=user_id,
+            channel_id=channel_id,
+            ts=ts,
+            logger=logger,
+            decision=result.final_decision,
+            reason=reason if result.final_decision == "REJECTED" else None,
+            attachment_url=attachment_url if result.final_decision else None,
+            status_text=result.status_text,
+            approver_level=result.approver_level,
+            include_actions=result.include_actions,
+            trace_id=trace_id,
+        )
+
+        refresh_targets = {user_id, request_owner}
+        refresh_targets.update(result.waiting_on or [])
 
         _schedule_home_refresh(
             client=client,
             logger=logger,
-            user_ids={user_id, request_owner},
+            user_ids=refresh_targets,
             trace_id=trace_id,
         )
     finally:
-
         unbind_contextvars("trace_id")
 
 
@@ -5179,6 +5136,8 @@ def _handle_home_action(decision: str, ack, body, client, logger):
 
             return
 
+        modal_level = None
+
         with session_scope() as session:
 
             request = session.get(Request, context.request_id)
@@ -5199,6 +5158,18 @@ def _handle_home_action(decision: str, ack, body, client, logger):
 
                 return
 
+            try:
+
+                definition = load_workflow_or_raise(request.type)
+
+            except (FileNotFoundError, ValidationError):
+
+                _ack_home_error(ack, block_id, "Workflow definition invalid. Please contact an admin.")
+
+                log.warning("home_definition_load_failed", request_type=request.type)
+
+                return
+
             if request.created_by == user_id:
 
                 _ack_home_error(ack, block_id, "You cannot approve your own request.")
@@ -5207,13 +5178,41 @@ def _handle_home_action(decision: str, ack, body, client, logger):
 
                 return
 
-            if request.status != "PENDING":
+            if not is_pending_status(request.status):
 
                 _ack_home_error(ack, block_id, "This request has already been decided.")
 
                 log.info("home_decision_already_recorded", request_status=request.status, user_id=user_id)
 
                 return
+
+            active_level = extract_level_from_status(request.status)
+
+            if context.level is not None and active_level is not None and context.level != active_level:
+
+                _ack_home_error(ack, block_id, "This request moved to another level. Please refresh and try again.")
+
+                log.info("home_level_mismatch", payload_level=context.level, current_level=active_level)
+
+                return
+
+            decisions = _load_level_decisions(session, request_id=request.id, level=active_level)
+
+            runtime = compute_level_runtime(
+                definition=definition,
+                status=request.status,
+                decisions=decisions,
+            )
+
+            if runtime.level is None or user_id not in runtime.waiting_on:
+
+                _ack_home_error(ack, block_id, "This request is not currently waiting on you.")
+
+                log.info("home_not_waiting", user_id=user_id)
+
+                return
+
+            modal_level = runtime.level
 
         trigger_id = body.get("trigger_id")
 
@@ -5229,6 +5228,7 @@ def _handle_home_action(decision: str, ack, body, client, logger):
             decision=decision,
             request_id=context.request_id,
             workflow_type=context.workflow_type,
+            level=modal_level,
         )
 
         ack()
@@ -5250,6 +5250,7 @@ def _handle_home_action(decision: str, ack, body, client, logger):
     finally:
 
         unbind_contextvars("trace_id")
+
 
 
 def _handle_home_approve_action(ack, body, client, logger):
@@ -5384,6 +5385,8 @@ def _handle_home_decision_submission(ack, body, client, logger):
 
         workflow_type = metadata.get("workflow_type")
 
+        metadata_level = metadata.get("level")
+
         log = log.bind(request_id=request_id, workflow_type=workflow_type, decision=decision)
 
         if decision not in {"APPROVED", "REJECTED"} or not request_id or not workflow_type:
@@ -5441,6 +5444,18 @@ def _handle_home_decision_submission(ack, body, client, logger):
 
             return
 
+        try:
+
+            definition = load_workflow_or_raise(workflow_type)
+
+        except (FileNotFoundError, ValidationError):
+
+            ack({"response_action": "errors", "errors": {"general": "Workflow definition invalid. Please contact an admin."}})
+
+            log.warning("home_decision_definition_missing", workflow_type=workflow_type)
+
+            return
+
         submission_payload = ""
 
         channel_id = ""
@@ -5448,6 +5463,8 @@ def _handle_home_decision_submission(ack, body, client, logger):
         ts = ""
 
         request_owner = ""
+
+        result = None
 
         with session_scope() as session:
 
@@ -5477,7 +5494,7 @@ def _handle_home_decision_submission(ack, body, client, logger):
 
                 return
 
-            if request.status != "PENDING":
+            if not is_pending_status(request.status):
 
                 ack({"response_action": "errors", "errors": {"general": "This request has already been decided."}})
 
@@ -5491,7 +5508,17 @@ def _handle_home_decision_submission(ack, body, client, logger):
 
                 ack({"response_action": "errors", "errors": {"general": "Request message is not yet available."}})
 
-                log.warning("home_decision_message_missing")
+                log.warning("home_decision_message_missing", user_id=user_id)
+
+                return
+
+            active_level = extract_level_from_status(request.status)
+
+            if metadata_level is not None and active_level is not None and metadata_level != active_level:
+
+                ack({"response_action": "errors", "errors": {"general": "This request moved to another level. Please refresh and try again."}})
+
+                log.info("home_decision_level_mismatch", payload_level=metadata_level, current_level=active_level)
 
                 return
 
@@ -5503,78 +5530,56 @@ def _handle_home_decision_submission(ack, body, client, logger):
 
             request_owner = request.created_by
 
+            log = log.bind(message_channel=channel_id)
+
             try:
 
-                advance_request_status(
-
+                result = _apply_level_decision(
                     session,
-
-                    request,
-
-                    new_status=decision,
-
-                    decided_by=user_id,
-
+                    request=request,
+                    definition=definition,
+                    user_id=user_id,
+                    decision=decision,
+                    source="home",
+                    reason=reason,
+                    attachment_url=attachment_url,
                 )
+
+            except LevelPermissionError:
+
+                ack({"response_action": "errors", "errors": {"general": "This request is not currently waiting on you."}})
+
+                log.info("home_decision_not_waiting", user_id=user_id)
+
+                return
 
             except StatusTransitionError:
 
                 ack({"response_action": "errors", "errors": {"general": "This request has already been decided."}})
 
-                log.info("home_decision_status_transition_conflict", request_status=request.status)
+                log.info("home_decision_race", user_id=user_id)
 
                 return
 
             except OptimisticLockError:
 
-                ack(
-                    {
-                        "response_action": "errors",
-                        "errors": {"general": "Request was updated concurrently. Please try again."},
-                    }
-                )
+                ack({"response_action": "errors", "errors": {"general": "Request was updated concurrently. Please try again."}})
 
-                log.warning("home_decision_optimistic_lock_failed")
+                log.warning("home_decision_optimistic_lock_failed", user_id=user_id)
 
                 return
 
-            _record_approval_decision(
+        if result is None:
 
-                session,
+            ack({"response_action": "errors", "errors": {"general": "Unable to record this decision."}})
 
-                request=request,
+            log.warning("home_decision_result_missing", user_id=user_id)
 
-                decision=decision,
-
-                decided_by=user_id,
-
-                reason=reason,
-
-                attachment_url=attachment_url,
-
-                source="home",
-
-            )
+            return
 
         ack({"response_action": "clear"})
 
         log.info("home_decision_recorded", user_id=user_id)
-
-        try:
-
-            definition = load_workflow_or_raise(workflow_type)
-
-        except (FileNotFoundError, ValidationError):
-
-            logger.exception(
-
-                "Unable to load workflow definition during home decision",
-
-                extra={"workflow_type": workflow_type},
-
-            )
-
-            return
 
         try:
 
@@ -5598,20 +5603,27 @@ def _handle_home_decision_submission(ack, body, client, logger):
             definition=definition,
             submission=submission,
             request_id=request_id,
-            decision=decision,
             decided_by=user_id,
             channel_id=channel_id,
             ts=ts,
             logger=logger,
-            reason=reason,
-            attachment_url=attachment_url,
+            decision=result.final_decision,
+            reason=reason if result.final_decision == "REJECTED" else None,
+            attachment_url=attachment_url if result.final_decision else None,
+            status_text=result.status_text,
+            approver_level=result.approver_level,
+            include_actions=result.include_actions,
             trace_id=trace_id,
         )
+
+        refresh_targets = {user_id, request_owner}
+
+        refresh_targets.update(result.waiting_on or [])
 
         _schedule_home_refresh(
             client=client,
             logger=logger,
-            user_ids={user_id, request_owner},
+            user_ids=refresh_targets,
             trace_id=trace_id,
         )
 
@@ -8577,14 +8589,6 @@ if __name__ == "__main__":  # pragma: no cover - manual execution helper
 
 
     application.run(host="0.0.0.0", port=3000, debug=True)
-
-
-
-
-
-
-
-
 
 
 
